@@ -16,10 +16,11 @@
 -- WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 --
 
--- Version: 2025.10.27-1
+-- Version: 2025.12.4-1
 
 -- Build Flag: LSUIElement
 -- Build Flag: IncludeSignedLauncher
+-- Build Flag: AllowMultipleInstances
 
 use AppleScript version "2.7"
 use scripting additions

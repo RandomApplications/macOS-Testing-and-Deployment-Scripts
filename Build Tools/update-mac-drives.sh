@@ -92,7 +92,7 @@ if [[ "${confirm_format_drives}" =~ ^[Yy] ]]; then
 				JHFS+ 'Install macOS Ventura'		14.53G		# 14.4 GB
 				JHFS+ 'Install macOS Sonoma'		15.985G		# 15.855 GB
 				JHFS+ 'Install macOS Sequoia'		17.995G		# 17.865 GB
-				JHFS+ 'Install macOS Tahoe'			19.635G		# 19.505 GB
+				JHFS+ 'Install macOS Tahoe'			19.72G		# 19.59 GB
 				JHFS+ 'Mac Test Boot'				0B			# All Remaining Space
 			)
 

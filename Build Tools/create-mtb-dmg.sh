@@ -26,6 +26,8 @@ readonly DARWIN_MAJOR_VERSION
 PROJECT_DIR="$(cd "${BASH_SOURCE[0]%/*}" &> /dev/null && pwd -P)/.."
 readonly PROJECT_DIR
 
+chmod -R +rX "${PROJECT_DIR}"
+
 TMPDIR="$([[ -d "${TMPDIR}" && -w "${TMPDIR}" ]] && echo "${TMPDIR%/}/" || echo '/private/tmp/')" # Make sure "TMPDIR" is always set and that it always has a trailing slash for consistency regardless of the current environment.
 
 mtb_source_path=''

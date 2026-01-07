@@ -22,6 +22,8 @@ PATH='/usr/bin:/bin:/usr/sbin:/sbin:/usr/libexec' # Add "/usr/libexec" to PATH f
 PROJECT_DIR="$(cd "${BASH_SOURCE[0]%/*}" &> /dev/null && pwd -P)/.."
 readonly PROJECT_DIR
 
+chmod -R +rX "${PROJECT_DIR}"
+
 if ! WIFI_PASSWORD="$(PlistBuddy -c 'Print :wifi_password' "${PROJECT_DIR}/../Build Tools/Free Geek Private Strings.plist")" || [[ -z "${WIFI_PASSWORD}" ]]; then
 	echo 'FAILED TO GET WI-FI PASSWORD'
 	exit 1
@@ -74,7 +76,7 @@ human_readable_duration_from_seconds() { # Based On: https://stackoverflow.com/a
 overall_start_timestamp="$(date '+%s')"
 connected_fgMIB_count=0
 
-if [[ -f "${PROJECT_DIR}/fg-install-os.sh" && -f '/Users/Shared/Mac Deployment/fg-prepare-os.pkg' ]]; then
+if [[ -f "${PROJECT_DIR}/fg-install-os.sh" && -f "${PROJECT_DIR}/reset-remote-management-check.sh" && -f '/Users/Shared/Mac Deployment/fg-prepare-os.pkg' ]]; then
 	for this_fgMIB_volume in '/Volumes/fgMIB'*; do
 		if [[ -d "${this_fgMIB_volume}" ]]; then
 			(( connected_fgMIB_count ++ ))
@@ -87,13 +89,24 @@ if [[ -f "${PROJECT_DIR}/fg-install-os.sh" && -f '/Users/Shared/Mac Deployment/f
 
 			rm -f "${this_fgMIB_volume}/fg-install-os"
 			echo 'COPYING fg-install-os...'
-			
+
 			# DO NOT JUST COPY "fg-install-os" SCRIPT SINCE WI-FI PASSWORD PLACEHOLDER NEED TO BE REPLACED WITH THE ACTUAL OBFUSCATED WI-FI PASSWORD.
 			# CANNOT USE "base64", "openssl base64", "xxd", or "uuencode"/"uudecode" TO OBFUSCATE WI-FI PASSWORD IN "fg-install-os" SINCE THEY ARE NOT IN RECOVERY, SO MUST USE A "tr" SHIFT.
 			sed "s/'\[COPY RESOURCES SCRIPT WILL REPLACE THIS PLACEHOLDER WITH OBFUSCATED WI-FI PASSWORD\]'/\"\$(echo '$(echo -n "${WIFI_PASSWORD}" | tr '\!-~' 'P-~\!-O')' | tr '\!-~' 'P-~\!-O')\"/" "${PROJECT_DIR}/fg-install-os.sh" > "${this_fgMIB_volume}/fg-install-os"
-			
+
 			chmod +x "${this_fgMIB_volume}/fg-install-os"
-			
+
+			if ! cmp -s "${PROJECT_DIR}/reset-remote-management-check.sh" "${this_fgMIB_volume}/reset-remote-management-check"; then
+				rm -f "${this_fgMIB_volume}/reset-remote-management-check"
+
+				echo 'COPYING reset-remote-management-check...'
+				ditto "${PROJECT_DIR}/reset-remote-management-check.sh" "${this_fgMIB_volume}/reset-remote-management-check" || exit
+			else
+				echo "EXACT COPY EXISTS: reset-remote-management-check"
+			fi
+
+			chmod +x "${this_fgMIB_volume}/reset-remote-management-check"
+
 			if [[ -d "${this_fgMIB_volume}/install-packages" && ! -e "${this_fgMIB_volume}/customization-resources" ]]; then # Rename old packages folder name to new folder name if needed.
 				echo 'RENAMING install-packages TO customization-resources...'
 				mv "${this_fgMIB_volume}/install-packages" "${this_fgMIB_volume}/customization-resources"
@@ -112,7 +125,7 @@ if [[ -f "${PROJECT_DIR}/fg-install-os.sh" && -f '/Users/Shared/Mac Deployment/f
 
 			for this_install_packages_script_file_or_folder in "${PROJECT_DIR}/Install Packages Script/"*; do
 				this_install_packages_script_file_or_folder_name="${this_install_packages_script_file_or_folder##*/}"
-				
+
 				if [[ "${this_install_packages_script_file_or_folder_name}" == 'OLD-'* ]]; then
 					echo "IGNORING OLD FILE OR FOLDER: customization-resources/${this_install_packages_script_file_or_folder_name}"
 				else
@@ -154,17 +167,21 @@ if [[ -f "${PROJECT_DIR}/fg-install-os.sh" && -f '/Users/Shared/Mac Deployment/f
 					fi
 				fi
 			done
-			
+
 			for this_extra_bins_folder in "${PROJECT_DIR}/extra-bins/"*; do
 				if [[ -d "${this_extra_bins_folder}" ]]; then
 					this_extra_bins_folder_name="${this_extra_bins_folder##*/}"
-					
+
 					if [[ ! -d "${this_fgMIB_volume}/extra-bins/${this_extra_bins_folder_name}" ]]; then
 						mkdir -p "${this_fgMIB_volume}/extra-bins/${this_extra_bins_folder_name}"
 					fi
 
 					for this_extra_bins_versioned_file in "${this_extra_bins_folder}/"*; do
 						if [[ -f "${this_extra_bins_versioned_file}" ]]; then
+							if [[ ! -x "${this_extra_bins_versioned_file}" ]]; then
+								chmod +x "${this_extra_bins_versioned_file}"
+							fi
+
 							this_extra_bins_versioned_file_name="${this_extra_bins_versioned_file##*/}"
 
 							if ! cmp -s "${this_extra_bins_versioned_file}" "${this_fgMIB_volume}/extra-bins/${this_extra_bins_folder_name}/${this_extra_bins_versioned_file_name}"; then
@@ -178,7 +195,7 @@ if [[ -f "${PROJECT_DIR}/fg-install-os.sh" && -f '/Users/Shared/Mac Deployment/f
 					done
 				fi
 			done
-			
+
 			echo "DONE WITH ${this_fgMIB_volume} ($(human_readable_duration_from_seconds "$(( $(date '+%s') - this_fgMIB_start_timestamp ))")) - UNMOUNTING..."
 			diskutil unmountDisk "${this_fgMIB_volume}"
 		else

@@ -95,4 +95,4 @@ function run(argv) {
 	fi
 done
 
-open -R "${installer_dmgs_path}"
+open "${installer_dmgs_path}"

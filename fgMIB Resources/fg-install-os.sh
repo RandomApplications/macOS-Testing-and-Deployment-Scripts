@@ -20,7 +20,7 @@
 # WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #
 
-readonly SCRIPT_VERSION='2025.10.27-1'
+readonly SCRIPT_VERSION='2025.12.4-1'
 
 PATH='/usr/bin:/bin:/usr/sbin:/sbin:/usr/libexec' # Add "/usr/libexec" to PATH for easy access to PlistBuddy.
 
@@ -1255,11 +1255,19 @@ if [[ -n "${clean_install_to_customize_volume}" ]]; then
 		rm -rf "${clean_install_to_customize_volume}/Library/Preferences/"{,.[^.],..?}* \
 			"${clean_install_to_customize_volume}/Library/Caches/"{,.[^.],..?}* \
 			"${clean_install_to_customize_volume}/System/Library/Caches/"{,.[^.],..?}* \
+			"${clean_install_to_customize_volume}/private/var/db/ConfigurationProfiles/Settings/"{,.[^.],..?}* \
 			"${clean_install_to_customize_volume}/private/var/vm/"{,.[^.],..?}* \
 			"${clean_install_to_customize_volume}/private/var/folders/"{,.[^.],..?}* \
 			"${clean_install_to_customize_volume}/private/var/tmp/"{,.[^.],..?}* \
 			"${clean_install_to_customize_volume}/private/tmp/"{,.[^.],..?}* \
 			"${clean_install_to_customize_volume}/.TemporaryItems/"{,.[^.],..?}* &> /dev/null
+
+		touch "${clean_install_to_customize_volume}/private/var/db/ConfigurationProfiles/Settings/.cloudConfigRecordNotFound"
+		# NOTE: Above, all files within "/private/var/db/ConfigurationProfiles/Settings/" are deleted to reset any Remote Management Enrollment data that may have been saved during Setup Assistant.
+		# But, if neither the ".cloudConfigRecordFound" nor the ".cloudConfigRecordNotFound" file exists, some Setup Assistant screens could be shown on next boot for some reason.
+		# So, create the ".cloudConfigRecordNotFound" file to be sure macOS is starting in a state of thinking that Remote Management is NOT enabled.
+		# If Remote Management is actually enabled, the ".cloudConfigRecordNotFound" file will be deleted and the ".cloudConfigRecordFound" file
+		# (and others) will be re-created next time "profiles renew -type enrollment" is run.
 
 		write_to_log 'Successfully Copied Customization Resources and Prepared Customization'
 

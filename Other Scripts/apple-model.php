@@ -520,7 +520,7 @@ if ($model_name) {
 		}
 	}
 } else {
-	$output_dict['error'] = ($error ?: 'UNKNOWN Model for ' . ($serial ? $serial_display : 'ID "' . $model_id . '"'));
+	$output_dict['error'] = ($error ?: 'UNKNOWN Model for ' . ($serial ? $serial_display : 'ID "' . ($model_id ?: $a_number) . '"'));
 }
 
 if (array_key_exists('redirect', $_REQUEST)) {

@@ -16,7 +16,7 @@
 -- WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 --
 
--- Version: 2025.10.24-1
+-- Version: 2025.12.4-1
 
 -- App Icon is “Broom” from Twemoji (https://github.com/twitter/twemoji) by Twitter (https://twitter.com)
 -- Licensed under CC-BY 4.0 (https://creativecommons.org/licenses/by/4.0/)
@@ -149,6 +149,7 @@ if (((short user name of (system info)) is equal to demoUsername) and ((POSIX pa
 		set isBigSurOrNewer to (systemVersion ≥ "11.0")
 		set isMontereyOrNewer to (systemVersion ≥ "12.0")
 		set isVenturaOrNewer to (systemVersion ≥ "13.0")
+		set isSonomaOrNewer to (systemVersion ≥ "14.0")
 		set isSequoiaFifteenDotSixOrNewer to (systemVersion ≥ "15.6")
 		set isTahoeOrNewer to (systemVersion ≥ "16.0")
 	end considering
@@ -526,6 +527,13 @@ Remote Management (ADE/DEP/MDM)?" message "Remote Management check will be skipp
 to check for Remote Management (ADE/DEP/MDM)." with administrator privileges)
 						end try
 					end try
+					
+					if (isSonomaOrNewer) then -- macOS 14 Sonoma adds a FULL SCREEN Remote Management Enrollment prompt which is run by Setup Assistant, so quit Setup Assistant to close this prompt if it comes up.
+						try
+							(("/private/var/db/ConfigurationProfiles/Settings/.cloudConfigRecordFound" as POSIX file) as alias) -- Only need to check if Setup Assistant launched if an enrollment record was found, which would creat this file.
+							do shell script "for (( quit_setup_assistant_attempt = 0; quit_setup_assistant_attempt < 10; quit_setup_assistant_attempt ++ )); do sleep 1; killall 'Setup Assistant' > /dev/null 2>&1 && break; done; exit 0" with administrator privileges
+						end try
+					end if
 					
 					if (remoteManagementOutput contains " - Request too soon.") then -- macOS 12.3 adds client side "profiles show" rate limiting of once every 23 hours: https://derflounder.wordpress.com/2022/03/22/profiles-command-includes-client-side-rate-limitation-for-certain-functions-on-macos-12-3/
 						try

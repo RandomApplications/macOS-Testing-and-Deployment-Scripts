@@ -30,7 +30,7 @@
 # Only run if running as root on first boot after OS installation, or on a clean installation prepared by fg-install-os.
 # IMPORTANT: If on a clean installation prepared by fg-install-os, AppleSetupDone will have been created to not show Setup Assistant while the package installations run via LaunchDaemon.
 
-readonly SCRIPT_VERSION='2025.10.23-1'
+readonly SCRIPT_VERSION='2025.12.5-1'
 
 PATH='/usr/bin:/bin:/usr/sbin:/sbin:/usr/libexec' # Add "/usr/libexec" to PATH for easy access to PlistBuddy.
 
@@ -1728,6 +1728,55 @@ rm -f \"\${TMPDIR}fg-usernoted.plist\"
 								fi
 
 								chown -R "${this_uid}:20" "${this_user_launch_agents_folder}"
+
+
+								if (( DARWIN_MAJOR_VERSION >= 23 )) && [[ -d "${this_user_apps_folder}/Free Geek Task Runner.app" && -d '/private/var/db/ConfigurationProfiles/Settings' ]]; then
+									# macOS 14 Sonoma adds a full screen Remote Management enrollment prompt which is run by Setup Assistant,
+									# so whenever the files witin "/private/var/db/ConfigurationProfiles/Settings" are modified,
+									# check if Setup Assistant has been launched and quit it to close this prompt if it comes up.
+
+									write_to_log "Creating LaunchDaemon to Close Full Screen Remote Management Enrollment Prompt"
+
+									# NOTE: See comments in "SETUP FREE GEEK SETUP AUTO-LAUNCH" section above for information about "AssociatedBundleIdentifiers" to properly display in the Login Items section in macOS 13 Ventura, and using "LSRegisterURL" and "open" for the "Free Geek Task Runner" app name and icon properly show for the following LaunchAgent in the Login Items section.
+									osascript -l 'JavaScript' -e 'ObjC.import("LaunchServices"); run = argv => $.LSRegisterURL($.NSURL.fileURLWithPath(argv[0]), true)' -- "${this_user_apps_folder}/Free Geek Task Runner.app" &> /dev/null
+									launchctl asuser "${this_uid}" sudo -u "${this_username}" open -na "${this_user_apps_folder}/Free Geek Task Runner.app"
+
+									PlistBuddy \
+										-c 'Add :Label string org.freegeek.Close-Remote-Management-Enrollment-Prompt' \
+										-c 'Add :ProgramArguments array' \
+										-c "Add :ProgramArguments: string '${this_user_apps_folder}/Free Geek Task Runner.app/Contents/Resources/Launch Free Geek Task Runner'" \
+										-c "Add :ProgramArguments: string bash" \
+										-c 'Add :AssociatedBundleIdentifiers string org.freegeek.Free-Geek-Task-Runner' \
+										-c 'Add :RunAtLoad bool true' \
+										-c 'Add :WatchPaths array' \
+										-c "Add :WatchPaths: string '/private/var/db/ConfigurationProfiles/Settings/'" \
+										-c 'Add :StandardOutPath string /dev/null' \
+										-c 'Add :StandardErrorPath string /dev/null' \
+										'/Library/LaunchDaemons/org.freegeek.Close-Remote-Management-Enrollment-Prompt.plist' &> /dev/null
+
+									close_remote_management_enrollment_prompt_code="
+PATH='/usr/bin:/bin:/usr/sbin:/sbin'
+
+if [[ -f '/private/var/db/ConfigurationProfiles/Settings/.cloudConfigRecordFound' ]]; then
+	for (( quit_setup_assistant_attempt = 0; quit_setup_assistant_attempt < 30; quit_setup_assistant_attempt ++ )); do
+		sleep 1
+		if killall 'Setup Assistant' &> /dev/null; then
+			break
+		fi
+	done
+fi
+"
+
+									plutil -insert 'ProgramArguments' -string "${close_remote_management_enrollment_prompt_code}" -append '/Library/LaunchDaemons/org.freegeek.Close-Remote-Management-Enrollment-Prompt.plist'
+									# Use "plutil" for script code that contains special xml/plist characters that need to be escaped.
+									# "PlistBuddy" would escape special xml/plist characters in values properly too, but because of how "PlistBuddy" values need to be specified inside of commands that
+									# are within a quoted string means that nested quotes in the values (which also exist) would need to be double escaped to not break the "PlistBuddy" commands themselves.
+									# That possible nested quoting issue doesn't exist with "plutil" because of how values are specified as their own separate argument rather than within commands like with "PlistBuddy".
+
+									if [[ ! -f '/Library/LaunchDaemons/org.freegeek.fg-install-packages.plist' ]]; then # Do not need to load right away if started via LaunchDaemon since we will restart.
+										launchctl bootstrap system '/Library/LaunchDaemons/org.freegeek.Close-Remote-Management-Enrollment-Prompt.plist'
+									fi
+								fi
 
 
 								if [[ -f '/Users/Shared/.fgResetSnapshotCreated' && -d "${this_user_apps_folder}/Free Geek Snapshot Helper.app" ]]; then

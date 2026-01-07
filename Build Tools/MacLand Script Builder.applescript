@@ -143,11 +143,19 @@ repeat
 			set (end of buildResultsOutput) to "⚠️		FAILED TO RETRIEVE markPreviouslyRemoteManagedMacAsRemovedURL"
 			set (end of buildResultsOutput) to ""
 		else if ((name of parentFolder) is equal to "Build Tools") then
+			set macLandAppsFolderPath to "/Users/Shared/Mac Deployment/MacLand Apps/"
+			try
+				do shell script "mkdir -p " & (quoted form of macLandAppsFolderPath)
+			end try
 			set zipsForAutoUpdateFolderPath to "/Users/Shared/Mac Deployment/App ZIPs for Auto-Update/"
 			try
 				do shell script "mkdir -p " & (quoted form of zipsForAutoUpdateFolderPath)
 			end try
+			set latestVersionsFilePath to (zipsForAutoUpdateFolderPath & "latest-versions.txt")
 			set macLandFolder to (container of parentFolder)
+			try
+				do shell script ("chmod -R +rX  " & (quoted form of (POSIX path of (macLandFolder as alias))))
+			end try
 			set scriptTypeFolders to (get folders of macLandFolder)
 			repeat with thisScriptTypeFolder in scriptTypeFolders
 				if ((((name of thisScriptTypeFolder) as text) is not equal to "Build Tools") and (((name of thisScriptTypeFolder) as text) is not equal to "fgMIB Resources") and (((name of thisScriptTypeFolder) as text) is not equal to "Other Scripts")) then
@@ -159,20 +167,29 @@ repeat
 						set AppleScript's text item delimiters to "-"
 						set thisScriptHyphenatedName to ((words of thisScriptName) as text)
 						
-						-- Only build if .app doesn't exit and Source folder does exist
-						set thisScriptAppPath to (thisScriptFolderPath & thisScriptName & ".app")
-						
 						try
-							((thisScriptAppPath as POSIX file) as alias)
-							set (end of buildResultsOutput) to "⏭️		" & (name of thisScriptTypeFolder) & " > " & thisScriptName & " ALREADY BUILT"
-						on error
-							try
-								set thisScriptSourcePath to (thisScriptFolderPath & "Source/" & thisScriptName & ".applescript")
-								((thisScriptSourcePath as POSIX file) as alias)
-								
-								do shell script "rm -f " & (quoted form of (thisScriptFolderPath & thisScriptHyphenatedName & ".zip")) & " " & (quoted form of (zipsForAutoUpdateFolderPath & thisScriptHyphenatedName & ".zip"))
-								
-								set thisScriptSource to (do shell script "cat " & (quoted form of thisScriptSourcePath) without altering line endings) -- VERY IMPORTANT to preserve "LF" line endings for multi-line "do shell script" commands within scripts to be able to work properly.
+							set thisScriptSourcePath to (thisScriptFolderPath & thisScriptName & ".applescript")
+							((thisScriptSourcePath as POSIX file) as alias)
+							
+							set thisScriptSource to (do shell script "cat " & (quoted form of thisScriptSourcePath) without altering line endings) -- VERY IMPORTANT to preserve "LF" line endings for multi-line "do shell script" commands within scripts to be able to work properly.
+							
+							set thisScriptAppVersion to (currentYear & "." & (word 1 of shortCurrentDateString) & "." & (word 2 of shortCurrentDateString))
+							if (thisScriptSource contains "-- Version: ") then
+								set AppleScript's text item delimiters to "-- Version: "
+								set thisScriptAppVersionPart to ((text item 2 of thisScriptSource) as text)
+								set thisScriptAppVersion to ((first paragraph of thisScriptAppVersionPart) as text)
+							end if
+							
+							set thisScriptAppPath to (macLandAppsFolderPath & thisScriptName & ".app")
+							set thisScriptZipPath to (zipsForAutoUpdateFolderPath & thisScriptHyphenatedName & ".zip")
+							
+							try -- Only build if outdated, or .app doesn't exit, or .zip doesn't exist (and AppleScript source file DOES exist).
+								if (thisScriptAppVersion is not equal to (do shell script ("awk -F ': ' '($1 == \"" & thisScriptName & "\") { print $2; exit }' " & (quoted form of latestVersionsFilePath)))) then error "OUTDATED BUILT APP"
+								((thisScriptAppPath as POSIX file) as alias)
+								((thisScriptZipPath as POSIX file) as alias)
+								set (end of buildResultsOutput) to "⏭️		" & (name of thisScriptTypeFolder) & " > ALREADY BUILT " & thisScriptName & " " & thisScriptAppVersion
+							on error
+								do shell script "rm -rf " & (quoted form of thisScriptAppPath) & " " & (quoted form of thisScriptZipPath)
 								
 								set obfuscatedAdminPasswordPlaceholder to "\"[MACLAND SCRIPT BUILDER WILL REPLACE THIS PLACEHOLDER WITH OBFUSCATED ADMIN PASSWORD]\""
 								set obfuscatedWiFiPasswordPlaceholder to "\"[MACLAND SCRIPT BUILDER WILL REPLACE THIS PLACEHOLDER WITH OBFUSCATED WI-FI PASSWORD]\""
@@ -296,7 +313,6 @@ end x"
 								end if
 								
 								set thisScriptAppBundleIdentifier to (bundleIdentifierPrefix & thisScriptHyphenatedName)
-								set thisScriptAppVersion to "UNKOWN VERSION"
 								
 								try
 									do shell script "osacompile" & addBuildRunOnlyArg & " -o " & (quoted form of thisScriptAppPath) & " -e " & (quoted form of thisScriptSource)
@@ -321,11 +337,16 @@ end x"
 											do shell script "plutil -replace CFBundleAlternateNames -json " & (quoted form of thisScriptAppAlternateNamesJSON) & " " & (quoted form of thisScriptAppInfoPlistPath)
 										end if
 										
+										set multipleInstancesProhibited to "true"
+										if (thisScriptSource contains "-- Build Flag: AllowMultipleInstances") then
+											set multipleInstancesProhibited to "false"
+										end if
+										
 										do shell script ("
 plutil -remove LSMinimumSystemVersionByArchitecture " & (quoted form of thisScriptAppInfoPlistPath) & "
 plutil -replace LSMinimumSystemVersion -string '10.13' " & (quoted form of thisScriptAppInfoPlistPath) & "
 
-plutil -replace LSMultipleInstancesProhibited -bool true " & (quoted form of thisScriptAppInfoPlistPath) & "
+plutil -replace LSMultipleInstancesProhibited -bool " & multipleInstancesProhibited & " " & (quoted form of thisScriptAppInfoPlistPath) & "
 
 # These two are so that error text is always in English, so that I can trust and conditions which check errors.
 plutil -replace CFBundleAllowMixedLocalizations -bool false " & (quoted form of thisScriptAppInfoPlistPath) & "
@@ -333,12 +354,6 @@ plutil -replace CFBundleDevelopmentRegion -string 'en_US' " & (quoted form of th
 
 plutil -replace NSAppleEventsUsageDescription -string " & (quoted form of ("You MUST click the “OK” button for “" & thisScriptName & "” to be able to function.")) & " " & (quoted form of thisScriptAppInfoPlistPath))
 										
-										set thisScriptAppVersion to (currentYear & "." & (word 1 of shortCurrentDateString) & "." & (word 2 of shortCurrentDateString))
-										if (thisScriptSource contains "-- Version: ") then
-											set AppleScript's text item delimiters to "-- Version: "
-											set thisScriptAppVersionPart to ((text item 2 of thisScriptSource) as text)
-											set thisScriptAppVersion to ((first paragraph of thisScriptAppVersionPart) as text)
-										end if
 										do shell script "plutil -replace CFBundleShortVersionString -string " & (quoted form of thisScriptAppVersion) & " " & (quoted form of thisScriptAppInfoPlistPath)
 										
 										do shell script ("
@@ -348,10 +363,10 @@ plutil -replace CFBundleExecutable -string " & (quoted form of thisScriptName) &
 mv " & (quoted form of (thisScriptAppPath & "/Contents/Resources/applet.rsrc")) & " " & (quoted form of (thisScriptAppPath & "/Contents/Resources/" & thisScriptName & ".rsrc")) & "
 
 rm -f " & (quoted form of (thisScriptAppPath & "/Contents/Resources/applet.icns")) & "
-ditto " & (quoted form of (thisScriptFolderPath & "Source/" & thisScriptName & " Icon/applet.icns")) & " " & (quoted form of (thisScriptAppPath & "/Contents/Resources/" & thisScriptName & ".icns")) & "
+ditto " & (quoted form of (thisScriptFolderPath & thisScriptName & " Icon/applet.icns")) & " " & (quoted form of (thisScriptAppPath & "/Contents/Resources/" & thisScriptName & ".icns")) & "
 plutil -replace CFBundleIconFile -string " & (quoted form of thisScriptName) & " " & (quoted form of thisScriptAppInfoPlistPath) & "
-if [[ -f " & (quoted form of (thisScriptFolderPath & "Source/" & thisScriptName & " Icon/Assets.car")) & " ]]; then
-	ditto " & (quoted form of (thisScriptFolderPath & "Source/" & thisScriptName & " Icon/Assets.car")) & " " & (quoted form of (thisScriptAppPath & "/Contents/Resources/Assets.car")) & "
+if [[ -f " & (quoted form of (thisScriptFolderPath & thisScriptName & " Icon/Assets.car")) & " ]]; then
+	ditto " & (quoted form of (thisScriptFolderPath & thisScriptName & " Icon/Assets.car")) & " " & (quoted form of (thisScriptAppPath & "/Contents/Resources/Assets.car")) & "
 	plutil -replace CFBundleIconName -string 'AppIcon' " & (quoted form of thisScriptAppInfoPlistPath) & "
 fi
 ")
@@ -378,9 +393,9 @@ plutil -replace FGBuiltByMacLandScriptBuilder -bool true " & (quoted form of thi
 chmod a-w " & (quoted form of (thisScriptAppPath & "/Contents/Resources/Scripts/main.scpt"))) -- The "main.scpt" must NOT be writable to prevent the code signature from being invalidated: https://developer.apple.com/library/archive/releasenotes/AppleScript/RN-AppleScript/RN-10_8/RN-10_8.html#//apple_ref/doc/uid/TP40000982-CH108-SW8
 										
 										try
-											(((thisScriptFolderPath & "Source/Resources/") as POSIX file) as alias)
+											(((thisScriptFolderPath & "Resources/") as POSIX file) as alias)
 											do shell script ("
-ditto " & (quoted form of (thisScriptFolderPath & "Source/Resources/")) & " " & (quoted form of (thisScriptAppPath & "/Contents/Resources/")) & "
+ditto " & (quoted form of (thisScriptFolderPath & "Resources/")) & " " & (quoted form of (thisScriptAppPath & "/Contents/Resources/")) & "
 rm -f " & (quoted form of (thisScriptAppPath & "/Contents/Resources/.DS_Store")))
 										end try
 										
@@ -410,7 +425,7 @@ codesign -fs 'Developer ID Application' --strict " & (quoted form of thisScriptA
 
 touch " & (quoted form of thisScriptAppPath) & "
 	
-ditto -ck --keepParent --sequesterRsrc --zlibCompressionLevel 9 " & (quoted form of thisScriptAppPath) & " " & (quoted form of (zipsForAutoUpdateFolderPath & thisScriptHyphenatedName & ".zip")))
+ditto -ck --keepParent --sequesterRsrc --zlibCompressionLevel 9 " & (quoted form of thisScriptAppPath) & " " & (quoted form of thisScriptZipPath))
 										on error codeSignError
 											do shell script "rm -rf " & (quoted form of thisScriptAppPath)
 											tell me
@@ -445,7 +460,7 @@ tccutil reset All " & (quoted form of ("com.randomapplications." & thisScriptHyp
 								end try
 								
 								try
-									(((zipsForAutoUpdateFolderPath & thisScriptHyphenatedName & ".zip") as POSIX file) as alias)
+									((thisScriptZipPath as POSIX file) as alias)
 									
 									if (addBuildRunOnlyArg is not equal to "") then
 										set (end of buildResultsOutput) to "✅🔒	" & (name of thisScriptTypeFolder) & " > BUILT (AS RUN-ONLY) " & thisScriptName & " " & thisScriptAppVersion
@@ -455,10 +470,11 @@ tccutil reset All " & (quoted form of ("com.randomapplications." & thisScriptHyp
 								on error
 									set (end of buildResultsOutput) to "⚠️		" & (name of thisScriptTypeFolder) & " > FAILED TO BUILD " & thisScriptName
 								end try
-							on error
-								-- NOTE: The "fgreset" script is no longer installed since we are no longer installing older than macOS 10.15 Catalina.
-								-- So, this code to include it for installation and auto-updating is now commented out, but it is being left in place in case it is useful in the future.
-								(*
+							end try
+						on error
+							-- NOTE: The "fgreset" script is no longer installed since we are no longer installing older than macOS 10.15 Catalina.
+							-- So, this code to include it for installation and auto-updating is now commented out, but it is being left in place in case it is useful in the future.
+							(*
 								try
 									set thisFGresetSourcePath to (thisScriptFolderPath & "fgreset.sh")
 									((thisFGresetSourcePath as POSIX file) as alias)
@@ -497,28 +513,27 @@ ditto " & (quoted form of (zipsForAutoUpdateFolderPath & "fgreset.zip")) & " " &
 									end try
 								on error
 								*)
-								set (end of buildResultsOutput) to "❌		" & (name of thisScriptTypeFolder) & " > " & thisScriptName & " NOT APPLESCRIPT APP"
-								--end try
-							end try
+							set (end of buildResultsOutput) to "❌		" & (name of thisScriptTypeFolder) & " > " & thisScriptName & " NOT APPLESCRIPT APP"
+							--end try
 						end try
 						
 						if ((((name of thisScriptTypeFolder) as text) is equal to "Production Scripts") or (thisScriptName is equal to "Free Geek Updater")) then
 							try
-								(((zipsForAutoUpdateFolderPath & thisScriptHyphenatedName & ".zip") as POSIX file) as alias)
+								((thisScriptZipPath as POSIX file) as alias)
 								
 								if (thisScriptName is equal to "Free Geek Login Progress") then
 									do shell script ("
 mkdir -p " & (quoted form of ((POSIX path of (macLandFolder as alias)) & "fgMIB Resources/Install Packages Script/Tools/")) & "
 rm -f " & (quoted form of ((POSIX path of (macLandFolder as alias)) & "fgMIB Resources/Install Packages Script/Tools/" & thisScriptHyphenatedName & ".zip")) & "
-ditto " & (quoted form of (zipsForAutoUpdateFolderPath & thisScriptHyphenatedName & ".zip")) & " " & (quoted form of ((POSIX path of (macLandFolder as alias)) & "fgMIB Resources/Install Packages Script/Tools/")) & "
+ditto " & (quoted form of thisScriptZipPath) & " " & (quoted form of ((POSIX path of (macLandFolder as alias)) & "fgMIB Resources/Install Packages Script/Tools/")) & "
 
 mkdir -p " & (quoted form of ((POSIX path of (macLandFolder as alias)) & "fgMIB Resources/Prepare OS Package/Package Resources/fg-error-occurred/Tools/")) & "
 rm -f " & (quoted form of ((POSIX path of (macLandFolder as alias)) & "fgMIB Resources/Prepare OS Package/Package Resources/fg-error-occurred/Tools/" & thisScriptHyphenatedName & ".zip")) & "
-ditto " & (quoted form of (zipsForAutoUpdateFolderPath & thisScriptHyphenatedName & ".zip")) & " " & (quoted form of ((POSIX path of (macLandFolder as alias)) & "fgMIB Resources/Prepare OS Package/Package Resources/fg-error-occurred/Tools/")) & "
+ditto " & (quoted form of thisScriptZipPath) & " " & (quoted form of ((POSIX path of (macLandFolder as alias)) & "fgMIB Resources/Prepare OS Package/Package Resources/fg-error-occurred/Tools/")) & "
 
 mkdir -p " & (quoted form of ((POSIX path of (macLandFolder as alias)) & "fgMIB Resources/Prepare OS Package/Package Resources/fg-snapshot-reset/Tools/")) & "
 rm -f " & (quoted form of ((POSIX path of (macLandFolder as alias)) & "fgMIB Resources/Prepare OS Package/Package Resources/fg-snapshot-reset/Tools/" & thisScriptHyphenatedName & ".zip")) & "
-ditto " & (quoted form of (zipsForAutoUpdateFolderPath & thisScriptHyphenatedName & ".zip")) & " " & (quoted form of ((POSIX path of (macLandFolder as alias)) & "fgMIB Resources/Prepare OS Package/Package Resources/fg-snapshot-reset/Tools/")))
+ditto " & (quoted form of thisScriptZipPath) & " " & (quoted form of ((POSIX path of (macLandFolder as alias)) & "fgMIB Resources/Prepare OS Package/Package Resources/fg-snapshot-reset/Tools/")))
 								else
 									set userAppsDarwinVersionFolder to "darwin-all-versions"
 									if ((thisScriptName is equal to "Free Geek Snapshot Helper") or (thisScriptName is equal to "Free Geek Reset")) then
@@ -527,7 +542,7 @@ ditto " & (quoted form of (zipsForAutoUpdateFolderPath & thisScriptHyphenatedNam
 									do shell script ("
 mkdir -p " & (quoted form of ((POSIX path of (macLandFolder as alias)) & "fgMIB Resources/Prepare OS Package/Package Resources/User/fg-demo/Apps/" & userAppsDarwinVersionFolder & "/")) & "
 rm -f " & (quoted form of ((POSIX path of (macLandFolder as alias)) & "fgMIB Resources/Prepare OS Package/Package Resources/User/fg-demo/Apps/" & userAppsDarwinVersionFolder & "/" & thisScriptHyphenatedName & ".zip")) & "
-ditto " & (quoted form of (zipsForAutoUpdateFolderPath & thisScriptHyphenatedName & ".zip")) & " " & (quoted form of ((POSIX path of (macLandFolder as alias)) & "fgMIB Resources/Prepare OS Package/Package Resources/User/fg-demo/Apps/" & userAppsDarwinVersionFolder & "/")))
+ditto " & (quoted form of thisScriptZipPath) & " " & (quoted form of ((POSIX path of (macLandFolder as alias)) & "fgMIB Resources/Prepare OS Package/Package Resources/User/fg-demo/Apps/" & userAppsDarwinVersionFolder & "/")))
 								end if
 							end try
 						end if
@@ -538,7 +553,6 @@ ditto " & (quoted form of (zipsForAutoUpdateFolderPath & thisScriptHyphenatedNam
 				end if
 			end repeat
 			
-			set latestVersionsFilePath to (zipsForAutoUpdateFolderPath & "latest-versions.txt")
 			do shell script "rm -f " & (quoted form of latestVersionsFilePath) & "; touch " & (quoted form of latestVersionsFilePath)
 			
 			set zipFilesForAutoUpdate to (every file of ((zipsForAutoUpdateFolderPath as POSIX file) as alias) whose name extension is "zip")

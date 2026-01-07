@@ -16,7 +16,7 @@
 -- WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 --
 
--- Version: 2025.10.27-1
+-- Version: 2025.12.4-1
 
 -- Build Flag: LSUIElement
 -- Build Flag: IncludeSignedLauncher
@@ -1583,6 +1583,13 @@ Remote Management (ADE/DEP/MDM)?" message "Remote Management check will be skipp
 to check for Remote Management (ADE/DEP/MDM)." with administrator privileges)
 						end try
 					end try
+					
+					if (isSonomaOrNewer) then -- macOS 14 Sonoma adds a FULL SCREEN Remote Management Enrollment prompt which is run by Setup Assistant, so quit Setup Assistant to close this prompt if it comes up.
+						try
+							(("/private/var/db/ConfigurationProfiles/Settings/.cloudConfigRecordFound" as POSIX file) as alias) -- Only need to check if Setup Assistant launched if an enrollment record was found, which would creat this file.
+							do shell script "for (( quit_setup_assistant_attempt = 0; quit_setup_assistant_attempt < 10; quit_setup_assistant_attempt ++ )); do sleep 1; killall 'Setup Assistant' > /dev/null 2>&1 && break; done; exit 0" with administrator privileges
+						end try
+					end if
 					
 					if (remoteManagementOutput contains " - Request too soon.") then -- macOS 12.3 adds client side "profiles show" rate limiting of once every 23 hours: https://derflounder.wordpress.com/2022/03/22/profiles-command-includes-client-side-rate-limitation-for-certain-functions-on-macos-12-3/
 						try
