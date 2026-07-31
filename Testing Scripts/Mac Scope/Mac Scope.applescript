@@ -16,7 +16,7 @@
 -- WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 --
 
--- Version: 2025.12.4-1
+-- Version: 2026.6.16-1
 
 -- App Icon is “Microscope” from Twemoji (https://github.com/twitter/twemoji) by Twitter (https://twitter.com)
 -- Licensed under CC-BY 4.0 (https://creativecommons.org/licenses/by/4.0/)
@@ -148,13 +148,16 @@ considering numeric strings
 	set isCatalinaOrNewer to (systemVersion ≥ "10.15")
 	set isBigSurOrNewer to (systemVersion ≥ "11.0")
 	set isSonomaOrNewer to (systemVersion ≥ "14.0")
+	set isTahoeTwentySixDotFourOrNewer to (systemVersion ≥ "26.4")
 end considering
 
 if (isMojaveOrNewer) then
 	try
-		tell application id "com.apple.systemevents" to every window -- To prompt for Automation access on Mojave
+		tell application id "com.apple.systemevents" to every window -- To prompt for AppleEvents/Automation permission.
 	on error automationAccessErrorMessage number automationAccessErrorNumber
-		if (automationAccessErrorNumber is equal to -1743) then
+		if ((automationAccessErrorNumber is equal to -1743) or (automationAccessErrorNumber is equal to -1712)) then
+			-- Error -1743 = Not authorized to send Apple events to app.
+			-- Error -1712 = AppleEvent timed out.
 			try
 				tell application id "com.apple.systempreferences" to activate
 			end try
@@ -242,6 +245,7 @@ repeat
 		set supportsSonoma to false
 		set supportsSequoia to false
 		set supportsTahoe to false
+		set supportsGoldenGate to false
 		set shortModelName to "UNKNOWN Model Name  ⚠️"
 		set modelIdentifier to "UNKNOWN Model Identifier"
 		set memorySize to "⚠️	UNKNOWN Size"
@@ -269,7 +273,7 @@ repeat
 					try
 						set serialNumber to ((value of property list item "serial_number" of hardwareItems) as text) -- https://www.macrumors.com/2010/04/16/apple-tweaks-serial-number-format-with-new-macbook-pro/
 						set serialNumberLength to (length of serialNumber)
-						if (serialNumber is equal to "Not Available") then
+						if (serialNumber ends with "vailable") then -- In "system_profiler", Macs without a serial number will show as "Unavailable" on macOS 11 Big Sur and newer and as "Not Available" on macOS 10.15 Catalina and older.
 							set serialNumber to "UNKNOWNXXXXX"
 						else if ((serialNumberLength is equal to 11) or (serialNumberLength is equal to 12)) then
 							set serialNumberDatePart to (text 3 thru 5 of serialNumber)
@@ -317,8 +321,10 @@ repeat
 					
 					try
 						set chipType to ((value of property list item "chip_type" of hardwareItems) as text) -- This will only exist when running natively on Apple Silicon
-						set isAppleSilicon to true
+						if (chipType starts with "Apple ") then set isAppleSilicon to true
 					end try
+					
+					if (isAppleSilicon) then set supportsGoldenGate to true
 					
 					try
 						set processorsCount to ((value of property list item "packages" of hardwareItems) as text) -- This will only exist on Intel or Apple Silicon under Rosetta
@@ -580,7 +586,7 @@ repeat
 			
 			set powerAdapterType to "⚠️	UNKNOWN Power Adapter  ⚠️"
 			
-			-- Power Adapter Model IDs Last Updated: 10/27/25
+			-- Power Adapter Model IDs Last Updated: 04/02/26
 			if ({"MacBookPro1,1", "MacBookPro1,2", "MacBookPro2,1", "MacBookPro2,2", "MacBookPro3,1", "MacBookPro4,1", "MacBookPro5,1", "MacBookPro5,2", "MacBookPro5,3", "MacBookPro6,1", "MacBookPro6,2", "MacBookPro8,2", "MacBookPro8,3", "MacBookPro9,1"} contains modelIdentifier) then
 				set powerAdapterType to "85W MagSafe 1"
 			else if ({"MacBook1,1", "MacBook2,1", "MacBook3,1", "MacBook4,1", "MacBook5,1", "MacBook5,2", "MacBook6,1", "MacBook7,1", "MacBookPro5,4", "MacBookPro5,5", "MacBookPro7,1", "MacBookPro8,1", "MacBookPro9,2"} contains modelIdentifier) then
@@ -605,16 +611,20 @@ repeat
 				set powerAdapterType to "30W USB-C"
 			else if ({"MacBook8,1", "MacBook9,1"} contains modelIdentifier) then
 				set powerAdapterType to "29W USB-C"
-			else if ({"Mac14,6", "Mac14,10", "Mac15,7", "Mac15,9", "Mac15,11", "Mac16,5", "Mac16,7", "MacBookPro18,1", "MacBookPro18,2"} contains modelIdentifier) then
+			else if ({"Mac17,5"} contains modelIdentifier) then
+				set powerAdapterType to "20W USB-C"
+			else if ({"Mac14,6", "Mac14,10", "Mac15,7", "Mac15,9", "Mac15,11", "Mac16,5", "Mac16,7", "Mac17,6", "Mac17,8", "MacBookPro18,1", "MacBookPro18,2"} contains modelIdentifier) then
 				set powerAdapterType to "140W USB-C/MagSafe 3"
 			else if ({"Mac14,5", "Mac14,9", "MacBookPro18,3", "MacBookPro18,4"} contains modelIdentifier) then
 				set powerAdapterType to "67W or 96W USB-C/MagSafe 3"
+			else if ({"Mac15,3", "Mac15,6", "Mac15,8", "Mac15,10", "Mac16,1", "Mac16,6", "Mac16,8", "Mac17,2", "Mac17,7", "Mac17,9"} contains modelIdentifier) then
+				set powerAdapterType to "70W or 96W USB-C/MagSafe 3"
 			else if ({"Mac14,2", "Mac15,12", "Mac16,12"} contains modelIdentifier) then
 				set powerAdapterType to "30W or 35W Dual Port or 70W USB-C/MagSafe 3"
 			else if ({"Mac14,15", "Mac15,13", "Mac16,13"} contains modelIdentifier) then
 				set powerAdapterType to "35W Dual Port or 70W USB-C/MagSafe 3"
-			else if ({"Mac15,3", "Mac15,6", "Mac15,8", "Mac15,10", "Mac16,1", "Mac16,6", "Mac16,8", "Mac17,2"} contains modelIdentifier) then
-				set powerAdapterType to "70W or 96W USB-C/MagSafe 3"
+			else if ({"Mac17,3", "Mac17,4"} contains modelIdentifier) then
+				set powerAdapterType to "35W Dual Port or 40W (with 60W Max) or 70W USB-C/MagSafe 3"
 			end if
 			
 			(* OLD CODE (Last Updated: 8/10/22)
@@ -1646,8 +1656,12 @@ repeat
 									-- For some strange reason, detailed Bluetooth information no longer exists in Monterey, can only detect if it is present.
 									-- BUT, I wrote a script (https://github.com/freegeek-pdx/macOS-Testing-and-Deployment-Scripts/blob/main/Other%20Scripts/get_bluetooth_from_all_mac_specs_pages.sh) to extract every Bluetooth version from every specs URL to be able to know what version this model has if Bluetooth is detected.
 									
-									-- Bluetooth Model IDs Last Updated: 10/27/25
-									if ({"Mac14,2", "Mac14,3", "Mac14,5", "Mac14,6", "Mac14,8", "Mac14,9", "Mac14,10", "Mac14,12", "Mac14,13", "Mac14,14", "Mac14,15", "Mac15,3", "Mac15,4", "Mac15,5", "Mac15,6", "Mac15,7", "Mac15,8", "Mac15,9", "Mac15,10", "Mac15,11", "Mac15,12", "Mac15,13", "Mac15,14", "Mac16,1", "Mac16,2", "Mac16,3", "Mac16,5", "Mac16,6", "Mac16,7", "Mac16,8", "Mac16,9", "Mac16,10", "Mac16,11", "Mac16,12", "Mac16,13", "Mac17,2"} contains modelIdentifier) then
+									-- Bluetooth Model IDs Last Updated: 04/02/26
+									if ({"Mac17,3", "Mac17,4", "Mac17,5", "Mac17,6", "Mac17,7", "Mac17,8", "Mac17,9"} contains modelIdentifier) then
+										set bluetoothInfo to "Bluetooth 6 Detected"
+										set (end of bluetoothSupportedFeaturesList) to "BLE"
+										set (end of bluetoothSupportedFeaturesList) to "Handoff"
+									else if ({"Mac14,2", "Mac14,3", "Mac14,5", "Mac14,6", "Mac14,8", "Mac14,9", "Mac14,10", "Mac14,12", "Mac14,13", "Mac14,14", "Mac14,15", "Mac15,3", "Mac15,4", "Mac15,5", "Mac15,6", "Mac15,7", "Mac15,8", "Mac15,9", "Mac15,10", "Mac15,11", "Mac15,12", "Mac15,13", "Mac15,14", "Mac16,1", "Mac16,2", "Mac16,3", "Mac16,5", "Mac16,6", "Mac16,7", "Mac16,8", "Mac16,9", "Mac16,10", "Mac16,11", "Mac16,12", "Mac16,13", "Mac17,2"} contains modelIdentifier) then
 										set bluetoothInfo to "Bluetooth 5.3 Detected"
 										set (end of bluetoothSupportedFeaturesList) to "BLE"
 										set (end of bluetoothSupportedFeaturesList) to "Handoff"
@@ -1895,8 +1909,12 @@ repeat
 							-- For some strange reason, detailed Bluetooth information no longer exists in Monterey, can only detect if it is present.
 							-- BUT, I wrote a script (https://github.com/freegeek-pdx/macOS-Testing-and-Deployment-Scripts/blob/main/Other%20Scripts/get_bluetooth_from_all_mac_specs_pages.sh) to extract every Bluetooth version from every specs URL to be able to know what version this model has if Bluetooth is detected.
 							
-							-- Bluetooth Model IDs Last Updated: 10/27/25
-							if ({"Mac14,2", "Mac14,3", "Mac14,5", "Mac14,6", "Mac14,8", "Mac14,9", "Mac14,10", "Mac14,12", "Mac14,13", "Mac14,14", "Mac14,15", "Mac15,3", "Mac15,4", "Mac15,5", "Mac15,6", "Mac15,7", "Mac15,8", "Mac15,9", "Mac15,10", "Mac15,11", "Mac15,12", "Mac15,13", "Mac15,14", "Mac16,1", "Mac16,2", "Mac16,3", "Mac16,5", "Mac16,6", "Mac16,7", "Mac16,8", "Mac16,9", "Mac16,10", "Mac16,11", "Mac16,12", "Mac16,13", "Mac17,2"} contains modelIdentifier) then
+							-- Bluetooth Model IDs Last Updated: 04/02/26
+							if ({"Mac17,3", "Mac17,4", "Mac17,5", "Mac17,6", "Mac17,7", "Mac17,8", "Mac17,9"} contains modelIdentifier) then
+								set bluetoothInfo to "Bluetooth 6 Detected"
+								set (end of bluetoothSupportedFeaturesList) to "BLE"
+								set (end of bluetoothSupportedFeaturesList) to "Handoff"
+							else if ({"Mac14,2", "Mac14,3", "Mac14,5", "Mac14,6", "Mac14,8", "Mac14,9", "Mac14,10", "Mac14,12", "Mac14,13", "Mac14,14", "Mac14,15", "Mac15,3", "Mac15,4", "Mac15,5", "Mac15,6", "Mac15,7", "Mac15,8", "Mac15,9", "Mac15,10", "Mac15,11", "Mac15,12", "Mac15,13", "Mac15,14", "Mac16,1", "Mac16,2", "Mac16,3", "Mac16,5", "Mac16,6", "Mac16,7", "Mac16,8", "Mac16,9", "Mac16,10", "Mac16,11", "Mac16,12", "Mac16,13", "Mac17,2"} contains modelIdentifier) then
 								set bluetoothInfo to "Bluetooth 5.3 Detected"
 								set (end of bluetoothSupportedFeaturesList) to "BLE"
 								set (end of bluetoothSupportedFeaturesList) to "Handoff"
@@ -2006,7 +2024,19 @@ to check for Remote Management (ADE/DEP/MDM)." with administrator privileges)
 				if (isSonomaOrNewer) then -- macOS 14 Sonoma adds a FULL SCREEN Remote Management Enrollment prompt which is run by Setup Assistant, so quit Setup Assistant to close this prompt if it comes up.
 					try
 						(("/private/var/db/ConfigurationProfiles/Settings/.cloudConfigRecordFound" as POSIX file) as alias) -- Only need to check if Setup Assistant launched if an enrollment record was found, which would creat this file.
-						do shell script "for (( quit_setup_assistant_attempt = 0; quit_setup_assistant_attempt < 10; quit_setup_assistant_attempt ++ )); do sleep 1; killall 'Setup Assistant' > /dev/null 2>&1 && break; done; exit 0" with administrator privileges
+						
+						try
+							do shell script "for quit_setup_assistant_attempt in $(seq 1 30); do sleep 1; killall 'Setup Assistant' > /dev/null 2>&1 && break; done > /dev/null 2>&1 &" with administrator privileges
+						end try
+						
+						if (isTahoeTwentySixDotFourOrNewer) then
+							-- Starting on macOS 26.4 Tahoe, when the Remote Management enrollment prompt is launched, macOS will also set the ByHost "com.apple.loginwindow" preference "MiniBuddyLaunch" to "true",
+							-- which would trigger user Setup Assistant to launch on the next boot. On Apple Silicon that seems to show Wi-Fi and Apple Intelligence user Setup Assistant panes, and on T2 Intel it shows the Accessibility pane (even when "~/.skipbuddy" was created).
+							-- So, always set the ByHost "com.apple.loginwindow" preference "MiniBuddyLaunch" back to "false" whenever the Remote Management enrollment prompt was launched.
+							try
+								do shell script "for disable_mini_buddy_launch_attempt in $(seq 1 30); do sleep 1; if [ \"$(defaults -currentHost read 'com.apple.loginwindow' 'MiniBuddyLaunch' 2> /dev/null)\" = '1' ]; then defaults -currentHost write 'com.apple.loginwindow' 'MiniBuddyLaunch' -bool false && break; fi; done > /dev/null 2>&1 &"
+							end try
+						end if
 					end try
 				end if
 				
@@ -2295,17 +2325,21 @@ This should not have happened, please inform Free Geek I.T." buttons {"Continue"
 	set supportedOS to "
 	OS X 10.11 El Capitan"
 	
-	if (supportsTahoe) then
+	if (supportsGoldenGate) then
 		set supportedOS to "
-	macOS 26 Tahoe"
+	macOS 27 Golden Gate"
+	else if (supportsTahoe) then
+		set supportedOS to "
+	macOS 26 Tahoe
+	⚠️	WILL NOT SUPPORT macOS 27 Golden Gate or Newer"
 	else if (supportsSequoia) then
 		set supportedOS to "
 	macOS 15 Sequoia
-	⚠️	WILL NOT SUPPORT macOS 26 Tahoe or Newer"
+	⚠️	DOES NOT SUPPORT macOS 26 Tahoe or Newer"
 	else if (supportsSonoma) then
 		set supportedOS to "
 	macOS 14 Sonoma
-	⚠️	WILL NOT SUPPORT macOS 15 Sequoia or Newer"
+	⚠️	DOES NOT SUPPORT macOS 15 Sequoia or Newer"
 	else if (supportsVentura) then
 		set supportedOS to "
 	macOS 13 Ventura

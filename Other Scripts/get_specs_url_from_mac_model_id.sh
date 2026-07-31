@@ -31,8 +31,11 @@ echo "Model ID: ${model_identifier}"
 
 # The following list of Specs URLs with grouped Model IDs is generated from: https://github.com/freegeek-pdx/macOS-Testing-and-Deployment-Scripts/blob/main/Other%20Scripts/get_every_docs_and_specs_id_with_marketing_model_name_and_model_ids_from_support_pages.sh
 # And the full output from that script is here: https://github.com/freegeek-pdx/macOS-Testing-and-Deployment-Scripts/blob/main/Other%20Scripts/scrape-support-pages-output/every_specs_id_with_marketing_model_name_and_model_ids_from_identification_pages.txt
-# List last updated on 10/27/2025
-every_mac_specs_url_with_grouped_model_ids='Mac Laptop;125405;MacBook Pro (14-inch, M5):MacBook Pro (14-inch, M5):Mac17,2:
+# List last updated on 04/02/26
+every_mac_specs_url_with_grouped_model_ids='Mac Laptop;126322;MacBook Neo:MacBook Neo (13-inch, A18 Pro):Mac17,5:
+Mac Laptop;126318;MacBook Pro (14-inch, M5 Pro or M5 Max):MacBook Pro (14-inch, M5 Pro or M5 Max):Mac17,7:Mac17,9:
+Mac Laptop;126319;MacBook Pro (16-inch, M5 Pro or M5 Max):MacBook Pro (16-inch, M5 Pro or M5 Max):Mac17,6:Mac17,8:
+Mac Laptop;125405;MacBook Pro (14-inch, M5):MacBook Pro (14-inch, M5):Mac17,2:
 Mac Laptop;121552;MacBook Pro (14-inch, 2024):MacBook Pro (14-inch, M4, 2024):Mac16,1:
 Mac Laptop;121553;MacBook Pro (14-inch, 2024):MacBook Pro (14-inch, M4 Pro or M4 Max, 2024):Mac16,6:Mac16,8:
 Mac Laptop;121554;MacBook Pro (16-inch, 2024):MacBook Pro (16-inch, 2024):Mac16,7:Mac16,5:
@@ -85,6 +88,8 @@ Mac Laptop;112624;MacBook Pro (15-inch, Mid 2009):MacBook Pro (15-inch, Mid 2009
 Mac Laptop;112624;MacBook Pro (15-inch, 2.53GHz, Mid 2009):MacBook Pro (15-inch, Mid 2009) or (15-inch, 2.53 GHz, Mid 2009):MacBookPro5,3:
 Mac Laptop;112474;MacBook Pro (13-inch, Mid 2009):MacBook Pro (13-inch, Mid 2009):MacBookPro5,5:
 Mac Laptop;112526;MacBook Pro (17-inch, Early 2009):MacBook Pro (17-inch, Early 2009):MacBookPro5,2:
+Mac Laptop;126321;MacBook Air (15-inch, M5):MacBook Air (15-inch, M5):Mac17,4:
+Mac Laptop;126320;MacBook Air (13-inch, M5):MacBook Air (13-inch, M5):Mac17,3:
 Mac Laptop;122210;MacBook Air (15-inch, M4, 2025):MacBook Air (15-inch, M4, 2025):Mac16,13:
 Mac Laptop;122209;MacBook Air (13-inch, M4, 2025):MacBook Air (13-inch, M4, 2025):Mac16,12:
 Mac Laptop;118552;MacBook Air (15-inch, M3, 2024):MacBook Air (15-inch, M3, 2024):Mac15,13:

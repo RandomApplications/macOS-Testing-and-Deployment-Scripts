@@ -28,7 +28,7 @@ fi
 
 declare -a installer_names_to_download=(
 #	'High Sierra' 'Mojave' 'Catalina' 'Big Sur' 'Monterey' 'Ventura' # NOT including these versions anymore since the latest installers are already downloaded and they will never get any new updates.
-	'Sonoma' 'Sequoia' 'Tahoe'
+	'Sonoma' 'Sequoia' 'Tahoe' 'Golden Gate Beta'
 )
 
 catalog_url='' # Fill with custom Software Update Catalog URL if needed.

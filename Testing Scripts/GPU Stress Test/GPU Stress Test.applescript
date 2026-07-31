@@ -16,7 +16,7 @@
 -- WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 --
 
--- Version: 2025.10.13-1
+-- Version: 2026.6.16-1
 
 -- App Icon is “Donut” from Twemoji (https://github.com/twitter/twemoji) by Twitter (https://twitter.com)
 -- Licensed under CC-BY 4.0 (https://creativecommons.org/licenses/by/4.0/)
@@ -178,9 +178,11 @@ end considering
 
 if (isMojaveOrNewer) then
 	try
-		tell application id "com.apple.systemevents" to every window -- To prompt for Automation access on Mojave
+		tell application id "com.apple.systemevents" to every window -- To prompt for AppleEvents/Automation permission.
 	on error automationAccessErrorMessage number automationAccessErrorNumber
-		if (automationAccessErrorNumber is equal to -1743) then
+		if ((automationAccessErrorNumber is equal to -1743) or (automationAccessErrorNumber is equal to -1712)) then
+			-- Error -1743 = Not authorized to send Apple events to app.
+			-- Error -1712 = AppleEvent timed out.
 			try
 				tell application id "com.apple.systempreferences" to activate
 			end try
@@ -223,9 +225,11 @@ on error (assistiveAccessTestErrorMessage)
 	if ((offset of "not allowed assistive" in assistiveAccessTestErrorMessage) > 0) then
 		if (isMojaveOrNewer) then
 			try
-				tell application id ("com.apple." & "TextEdit") to every window -- To prompt for Automation access on Mojave (Break up App ID to prevent TextEdit from launching when the script is being compiled.)
+				tell application id ("com.apple." & "TextEdit") to every window -- To prompt for AppleEvents/Automation permission. (Break up App ID to prevent TextEdit from launching when the script is being compiled.)
 			on error automationAccessErrorMessage number automationAccessErrorNumber
-				if (automationAccessErrorNumber is equal to -1743) then
+				if ((automationAccessErrorNumber is equal to -1743) or (automationAccessErrorNumber is equal to -1712)) then
+					-- Error -1743 = Not authorized to send Apple events to app.
+					-- Error -1712 = AppleEvent timed out.
 					try
 						tell application id "com.apple.systempreferences" to activate
 					end try
@@ -338,7 +342,7 @@ repeat 5 times
 					
 					try
 						set serialNumber to ((value of property list item "serial_number" of hardwareItems) as text) -- https://www.macrumors.com/2010/04/16/apple-tweaks-serial-number-format-with-new-macbook-pro/
-						if (((length of serialNumber) ≥ 11) and (serialNumber is not equal to "Not Available")) then
+						if (((length of serialNumber) ≥ 11) and (serialNumber does not end with "vailable")) then -- In "system_profiler", Macs without a serial number will show as "Unavailable" on macOS 11 Big Sur and newer and as "Not Available" on macOS 10.15 Catalina and older.
 							set serialNumberDatePart to (text 3 thru 5 of serialNumber)
 							if ((count of serialNumber) is equal to 12) then set serialNumberDatePart to (text 2 thru -1 of serialNumberDatePart)
 							set serialNumberModelPart to (text 9 thru -1 of serialNumber) -- The model part of the serial is the last 4 characters for 12 character serials and the last 3 characters for 11 character serials (which are very old and shouldn't actually be encountered).

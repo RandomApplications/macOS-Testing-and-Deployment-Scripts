@@ -16,7 +16,7 @@
 -- WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 --
 
--- Version: 2025.12.4-1
+-- Version: 2026.6.16-1
 
 -- Build Flag: LSUIElement
 -- Build Flag: IncludeSignedLauncher
@@ -121,6 +121,12 @@ set tmpPath to ((POSIX path of (((path to temporary items) as text) & "::")) & "
 if (((short user name of (system info)) is equal to demoUsername) and ((POSIX path of (path to me)) is equal to ("/Users/" & demoUsername & "/Applications/" & (name of me) & ".app/"))) then
 	set buildInfoPath to ((POSIX path of (path to shared documents folder)) & "Build Info/")
 	
+	set demoHelperAppPath to ("/Users/" & demoUsername & "/Applications/Free Geek Demo Helper.app")
+	
+	set cleanupAppPath to ("/Users/" & demoUsername & "/Applications/Cleanup After QA Complete.app")
+	
+	set freeGeekResetAppPath to ("/Users/" & demoUsername & "/Applications/Free Geek Reset.app")
+	
 	set freeGeekUpdaterAppPath to ("/Users/" & demoUsername & "/Applications/Free Geek Updater.app")
 	try
 		((freeGeekUpdaterAppPath as POSIX file) as alias)
@@ -149,6 +155,8 @@ if (((short user name of (system info)) is equal to demoUsername) and ((POSIX pa
 		set isSonomaOrNewer to (systemVersion ≥ "14.0")
 		set isSequoiaOrNewer to (systemVersion ≥ "15.0")
 		set isTahoeOrNewer to (systemVersion ≥ "16.0")
+		set isTahoeTwentySixDotFourOrNewer to (systemVersion ≥ "26.4")
+		set isGoldenGateOrNewer to (systemVersion ≥ "27.0")
 		
 		if (isHighSierraOrNewer and (not isMojaveOrNewer)) then
 			set osName to "macOS 10.13 High Sierra"
@@ -166,8 +174,10 @@ if (((short user name of (system info)) is equal to demoUsername) and ((POSIX pa
 			set osName to "macOS 14 Sonoma"
 		else if (isSequoiaOrNewer and (not isTahoeOrNewer)) then
 			set osName to "macOS 15 Sequoia"
-		else if (isTahoeOrNewer and (systemVersion < "27.0")) then
+		else if (isTahoeOrNewer and (not isGoldenGateOrNewer)) then
 			set osName to "macOS 26 Tahoe"
+		else if (isGoldenGateOrNewer and (systemVersion < "28.0")) then
+			set osName to "macOS 27 Golden Gate"
 		end if
 	end considering
 	
@@ -313,6 +323,12 @@ killall ControlStrip
 		end try
 	end try
 	
+	set alreadyGrantedUserTCC to false
+	try
+		(((buildInfoPath & ".fgSetupGrantedUserTCC") as POSIX file) as alias)
+		set alreadyGrantedUserTCC to true
+	end try
+	
 	if ((not didJustUpdate) and (not didJustGrantUserTCC)) then -- Do not update again if just updated or re-launching after granting TCC.
 		try
 			((freeGeekUpdaterAppPath as POSIX file) as alias)
@@ -394,7 +410,7 @@ killall ControlStrip
 			
 			set freeGeekResetIsInstalled to false
 			try
-				((("/Users/" & demoUsername & "/Applications/Free Geek Reset.app") as POSIX file) as alias)
+				((freeGeekResetAppPath as POSIX file) as alias)
 				set freeGeekResetIsInstalled to true -- MUST NOT check TCC permissions in this "try" since the "error" would get caught instead of being thrown to the parent "try".
 			end try
 			
@@ -417,146 +433,284 @@ killall ControlStrip
 				if (globalTCCallowedAppsAndServices does not contain (bundleIDofFreeGeekResetApp & "|kTCCServiceSystemPolicyAllFiles")) then error "“Free Geek Reset” DOES NOT HAVE REQUIRED Full Disk Access"
 			end if
 			
-			set userTCCdbPath to ((POSIX path of (path to library folder from user domain)) & "Application Support/com.apple.TCC/TCC.db")
-			set userTCCallowedAppsAndServices to (paragraphs of (do shell script ("sqlite3 " & (quoted form of userTCCdbPath) & " 'SELECT client,service,indirect_object_identifier FROM access WHERE (" & whereAllowedOrAuthValue & ")'"))) -- This SELECT command on the user TCC.db will error if "Free Geek Setup" doesn't have Full Disk Access (but that should never happen because we couldn't get this far without FDA).
-			
-			set bundleIDofQAHelperApp to "org.freegeek.QA-Helper"
-			
-			set bundleIDofSystemEventsApp to "com.apple.systemevents"
-			set bundleIDofFinderApp to "com.apple.finder"
-			set bundleIDofSystemPreferencesOrSettingsApp to "com.apple.systempreferences" -- The bundle ID for the new "System Settings" app in Ventura is the same as the previous "System Preferences" app.
-			set bundleIDofQuickTimeApp to "com.apple.QuickTimePlayerX"
-			
-			try
-				if (userTCCallowedAppsAndServices does not contain (bundleIDofFreeGeekSetupApp & "|kTCCServiceAppleEvents|" & bundleIDofSystemEventsApp)) then error ("“" & (name of me) & "” WAS NOT GRANTED REQUIRED AppleEvents/Automation Access for “System Events”")
-				if (userTCCallowedAppsAndServices does not contain (bundleIDofFreeGeekSetupApp & "|kTCCServiceAppleEvents|" & bundleIDofFinderApp)) then error ("“" & (name of me) & "” WAS NOT GRANTED REQUIRED AppleEvents/Automation Access for “Finder”")
-				if (userTCCallowedAppsAndServices does not contain (bundleIDofFreeGeekSetupApp & "|kTCCServiceAppleEvents|" & bundleIDofSystemPreferencesOrSettingsApp)) then error ("“" & (name of me) & "”  WAS NOT GRANTED REQUIRED AppleEvents/Automation Access for “" & (name of application id bundleIDofSystemPreferencesOrSettingsApp) & "”") -- Use "name of application id" to correctly display "System Preferences" or "System Settings" depending on macOS version.
+			if (isGoldenGateOrNewer) then
+				-- On macOS 27 Golden Gate, the USER TCC.db file was moved into "/private/var/containers/Data/ProtectedSystem/[ARBITRARY UUID SPECIFIC TO CONTAINER PURPOSE USER BUT NOT USERS GUID]/Data/Library/Application Support/com.apple.TCC/TCC.db" and CANNOT be read or edited with ANY LEVEL OF ADMIN OR TCC PERMISSIONS in the booted OS.
+				-- https://developer.apple.com/documentation/macos-release-notes/macos-27-release-notes#TCC
+				-- So, instead of being able to auto-grant the required permissions for all apps with the Full Disk Access permissions from Free Geek Setup, each app must manually prompt for the technician to approve the required User TCC permissions before being allowing the app to run.
 				
-				if (userTCCallowedAppsAndServices does not contain (bundleIDofFreeGeekDemoHelperApp & "|kTCCServiceAppleEvents|" & bundleIDofSystemEventsApp)) then error "“Free Geek Demo Helper” WAS NOT GRANTED REQUIRED AppleEvents/Automation Access for “System Events”"
-				if (userTCCallowedAppsAndServices does not contain (bundleIDofFreeGeekDemoHelperApp & "|kTCCServiceAppleEvents|" & bundleIDofFinderApp)) then error "“Free Geek Demo Helper” WAS NOT GRANTED REQUIRED AppleEvents/Automation Access for “Finder”"
+				set needsAutomationAccess to false
 				
-				if (userTCCallowedAppsAndServices does not contain (bundleIDofCleanupAfterQACompleteApp & "|kTCCServiceAppleEvents|" & bundleIDofSystemEventsApp)) then error "“Cleanup After QA Complete” WAS NOT GRANTED REQUIRED AppleEvents/Automation Access for “System Events”"
-				if (userTCCallowedAppsAndServices does not contain (bundleIDofCleanupAfterQACompleteApp & "|kTCCServiceAppleEvents|" & bundleIDofFinderApp)) then error "“Cleanup After QA Complete” WAS NOT GRANTED REQUIRED AppleEvents/Automation Access for “Finder”"
+				try
+					tell application id "com.apple.finder" to every window -- To prompt for AppleEvents/Automation permission.
+				on error automationAccessErrorMessage number automationAccessErrorNumber
+					if ((automationAccessErrorNumber is equal to -1743) or (automationAccessErrorNumber is equal to -1712)) then
+						-- Error -1743 = Not authorized to send Apple events to app.
+						-- Error -1712 = AppleEvent timed out.
+						set needsAutomationAccess to true
+						set alreadyGrantedUserTCC to false
+					else
+						display alert ("Unexpected Error " & automationAccessErrorNumber) message automationAccessErrorMessage -- DEBUG
+					end if
+				end try
 				
-				-- See comments below about both Microphone AND AppleEvents-QuickTime permissions for QA Helper.
-				if (userTCCallowedAppsAndServices does not contain (bundleIDofQAHelperApp & "|kTCCServiceMicrophone|UNUSED")) then error "“QA Helper” WAS NOT GRANTED REQUIRED Microphone Access"
-				if (userTCCallowedAppsAndServices does not contain (bundleIDofQAHelperApp & "|kTCCServiceAppleEvents|" & bundleIDofQuickTimeApp)) then error "“QA Helper” WAS NOT GRANTED REQUIRED AppleEvents/Automation Access for “System Events”"
-				if (not isBigSurOrNewer) then -- See comments below about QuickTime needing manual Microphone access on Mojave and Catalina, but not Big Sur and newer.
-					if (userTCCallowedAppsAndServices does not contain (bundleIDofQuickTimeApp & "|kTCCServiceMicrophone|UNUSED")) then error "“QuickTime Player” WAS NOT GRANTED REQUIRED Microphone Access"
-				else if (isVenturaOrNewer and (not hasT2chip) and (not isAppleSilicon)) then
-					-- See comments below about apps unneccessarily prompting for Microphone on pre-T2 Macs running Ventura.
-					set userTCCunauthorizedAppsAndServices to (paragraphs of (do shell script ("sqlite3 " & (quoted form of userTCCdbPath) & " 'SELECT client,service FROM access WHERE (auth_value = 0)'"))) -- This SELECT command on the user TCC.db will error if "Free Geek Setup" doesn't have Full Disk Access (but that should never happen because we couldn't get this far without FDA).
-					if (userTCCunauthorizedAppsAndServices does not contain (bundleIDofFreeGeekSetupApp & "|kTCCServiceMicrophone")) then error "“Free Geek Setup” WAS NOT DENIED Microphone Access"
-					if (userTCCunauthorizedAppsAndServices does not contain (bundleIDofFreeGeekUpdaterApp & "|kTCCServiceMicrophone")) then error "“Free Geek Updater” WAS NOT DENIED Microphone Access"
-					if (snapshotHelperIsInstalled and (userTCCunauthorizedAppsAndServices does not contain (bundleIDofFreeGeekSnapshotHelperApp & "|kTCCServiceMicrophone"))) then error "“Free Geek Snapshot Helper” WAS NOT DENIED Microphone Access"
-					if (userTCCunauthorizedAppsAndServices does not contain (bundleIDofFreeGeekDemoHelperApp & "|kTCCServiceMicrophone")) then error "“Free Geek Demo Helper” WAS NOT DENIED Microphone Access"
-					if (taskRunnerIsInstalled and (userTCCunauthorizedAppsAndServices does not contain (bundleIDofFreeGeekTaskRunnerApp & "|kTCCServiceMicrophone"))) then error "“Free Geek Task Runner” WAS NOT DENIED Microphone Access"
-					if (userTCCunauthorizedAppsAndServices does not contain (bundleIDofCleanupAfterQACompleteApp & "|kTCCServiceMicrophone")) then error "“Cleanup After QA Complete” WAS NOT DENIED Microphone Access"
-				end if
-			on error checkUserTCCErrorMessage
-				if (didJustGrantUserTCC) then error checkUserTCCErrorMessage
-				
-				-- The following csreq (Code Signing Requirement) hex strings were generated by https://github.com/freegeek-pdx/macOS-Testing-and-Deployment-Scripts/blob/main/Other%20Scripts/generate_csreq_hex_for_tcc_db.jxa
-				-- See comments in the "generate_csreq_hex_for_tcc_db.jxa" script for some important detailed information about these csreq hex strings (and https://developer.apple.com/documentation/technotes/tn3127-inside-code-signing-requirements).
-				
-				-- The following apps are the CLIENT apps that will be sending AppleEvents (or accessing the Microphone).
-				-- Including the csreq for the client seems to NOT actually be required when initially setting the TCC permissions and macOS will fill them out when the app launches for the first time.
-				-- But, that would reduce security by allowing any app that's first to launch with the specified Bundle Identifier to be granted the specified TCC permissions (even though fraudulent apps spoofing our Bundle IDs isn't a risk in our environment).
-				set csreqForFreeGeekSetupApp to "fade0c00000000a80000000100000006000000020000001c6f72672e667265656765656b2e467265652d4765656b2d5365747570000000060000000f000000060000000e000000010000000a2a864886f76364060206000000000000000000060000000e000000000000000a2a864886f7636406010d0000000000000000000b000000000000000a7375626a6563742e4f550000000000010000000a595257364e55474136330000"
-				set csreqForFreeGeekUpdaterApp to "fade0c00000000ac0000000100000006000000020000001e6f72672e667265656765656b2e467265652d4765656b2d557064617465720000000000060000000f000000060000000e000000010000000a2a864886f76364060206000000000000000000060000000e000000000000000a2a864886f7636406010d0000000000000000000b000000000000000a7375626a6563742e4f550000000000010000000a595257364e55474136330000"
-				set csreqForFreeGeekSnapshotHelperApp to "fade0c00000000b4000000010000000600000002000000266f72672e667265656765656b2e467265652d4765656b2d536e617073686f742d48656c7065720000000000060000000f000000060000000e000000010000000a2a864886f76364060206000000000000000000060000000e000000000000000a2a864886f7636406010d0000000000000000000b000000000000000a7375626a6563742e4f550000000000010000000a595257364e55474136330000"
-				set csreqForFreeGeekDemoHelperApp to "fade0c00000000b0000000010000000600000002000000226f72672e667265656765656b2e467265652d4765656b2d44656d6f2d48656c7065720000000000060000000f000000060000000e000000010000000a2a864886f76364060206000000000000000000060000000e000000000000000a2a864886f7636406010d0000000000000000000b000000000000000a7375626a6563742e4f550000000000010000000a595257364e55474136330000"
-				set csreqForFreeGeekTaskRunnerApp to "fade0c00000000b0000000010000000600000002000000226f72672e667265656765656b2e467265652d4765656b2d5461736b2d52756e6e65720000000000060000000f000000060000000e000000010000000a2a864886f76364060206000000000000000000060000000e000000000000000a2a864886f7636406010d0000000000000000000b000000000000000a7375626a6563742e4f550000000000010000000a595257364e55474136330000"
-				set csreqForCleanupAfterQACompleteApp to "fade0c00000000b4000000010000000600000002000000266f72672e667265656765656b2e436c65616e75702d41667465722d51412d436f6d706c6574650000000000060000000f000000060000000e000000010000000a2a864886f76364060206000000000000000000060000000e000000000000000a2a864886f7636406010d0000000000000000000b000000000000000a7375626a6563742e4f550000000000010000000a595257364e55474136330000"
-				set csreqForQAHelperApp to "fade0c00000000a4000000010000000600000002000000166f72672e667265656765656b2e51412d48656c7065720000000000060000000f000000060000000e000000010000000a2a864886f76364060206000000000000000000060000000e000000000000000a2a864886f7636406010d0000000000000000000b000000000000000a7375626a6563742e4f550000000000010000000a595257364e55474136330000"
-				set csreqForFreeGeekResetApp to "fade0c00000000a80000000100000006000000020000001c6f72672e667265656765656b2e467265652d4765656b2d5265736574000000060000000f000000060000000e000000010000000a2a864886f76364060206000000000000000000060000000e000000000000000a2a864886f7636406010d0000000000000000000b000000000000000a7375626a6563742e4f550000000000010000000a595257364e55474136330000"
-				
-				-- The following apps are the TARGET (or INDIRECT OBJECT) apps that the clients will be sending AppleEvents to.
-				-- Like the csreq's for the client, they also seem to not actually be required for the target/indirect_object, BUT if the indirect_object_code_identity is omitted, the permissions DON'T show up in the TCC Automation section of System Preferences even though the permissions still work (tested on both Catalina and Monterey).
-				set csreqForSystemEventsApp to "fade0c000000003400000001000000060000000200000016636f6d2e6170706c652e73797374656d6576656e7473000000000003"
-				set csreqForFinderApp to "fade0c000000002c00000001000000060000000200000010636f6d2e6170706c652e66696e64657200000003"
-				set csreqForSystemPreferencesOrSettingsApp to "fade0c00000000380000000100000006000000020000001b636f6d2e6170706c652e73797374656d707265666572656e6365730000000003" -- The csreq for the new "System Settings" app on Ventura is the same as the previous "System Preferences" app.
-				set csreqForQuickTimeApp to "fade0c00000000380000000100000006000000020000001a636f6d2e6170706c652e517569636b54696d65506c6179657258000000000003"
-				
-				set allowedOrAuthorizedFields to "1"
-				if (isBigSurOrNewer) then set allowedOrAuthorizedFields to "2,3"
-				
-				set currentUnixTime to (do shell script "date '+%s'")
-				
-				set footerFields to ""
-				if (isSonomaOrNewer) then set footerFields to (",NULL,NULL,'UNUSED'," & currentUnixTime)
-				
-				set setUserTCCpermissionsCommands to "BEGIN TRANSACTION;"
-				
-				set setUserTCCpermissionsCommands to (setUserTCCpermissionsCommands & "REPLACE INTO access VALUES('kTCCServiceAppleEvents','" & bundleIDofFreeGeekSetupApp & "',0," & allowedOrAuthorizedFields & ",1,X'" & csreqForFreeGeekSetupApp & "',NULL,0,'" & bundleIDofSystemEventsApp & "',X'" & csreqForSystemEventsApp & "',NULL," & currentUnixTime & footerFields & ");")
-				set setUserTCCpermissionsCommands to (setUserTCCpermissionsCommands & "REPLACE INTO access VALUES('kTCCServiceAppleEvents','" & bundleIDofFreeGeekSetupApp & "',0," & allowedOrAuthorizedFields & ",1,X'" & csreqForFreeGeekSetupApp & "',NULL,0,'" & bundleIDofFinderApp & "',X'" & csreqForFinderApp & "',NULL," & currentUnixTime & footerFields & ");")
-				set setUserTCCpermissionsCommands to (setUserTCCpermissionsCommands & "REPLACE INTO access VALUES('kTCCServiceAppleEvents','" & bundleIDofFreeGeekSetupApp & "',0," & allowedOrAuthorizedFields & ",1,X'" & csreqForFreeGeekSetupApp & "',NULL,0,'" & bundleIDofSystemPreferencesOrSettingsApp & "',X'" & csreqForSystemPreferencesOrSettingsApp & "',NULL," & currentUnixTime & footerFields & ");")
-				
-				set setUserTCCpermissionsCommands to (setUserTCCpermissionsCommands & "REPLACE INTO access VALUES('kTCCServiceAppleEvents','" & bundleIDofFreeGeekDemoHelperApp & "',0," & allowedOrAuthorizedFields & ",1,X'" & csreqForFreeGeekDemoHelperApp & "',NULL,0,'" & bundleIDofSystemEventsApp & "',X'" & csreqForSystemEventsApp & "',NULL," & currentUnixTime & footerFields & ");")
-				set setUserTCCpermissionsCommands to (setUserTCCpermissionsCommands & "REPLACE INTO access VALUES('kTCCServiceAppleEvents','" & bundleIDofFreeGeekDemoHelperApp & "',0," & allowedOrAuthorizedFields & ",1,X'" & csreqForFreeGeekDemoHelperApp & "',NULL,0,'" & bundleIDofFinderApp & "',X'" & csreqForFinderApp & "',NULL," & currentUnixTime & footerFields & ");")
-				
-				set setUserTCCpermissionsCommands to (setUserTCCpermissionsCommands & "REPLACE INTO access VALUES('kTCCServiceAppleEvents','" & bundleIDofCleanupAfterQACompleteApp & "',0," & allowedOrAuthorizedFields & ",1,X'" & csreqForCleanupAfterQACompleteApp & "',NULL,0,'" & bundleIDofSystemEventsApp & "',X'" & csreqForSystemEventsApp & "',NULL," & currentUnixTime & footerFields & ");")
-				set setUserTCCpermissionsCommands to (setUserTCCpermissionsCommands & "REPLACE INTO access VALUES('kTCCServiceAppleEvents','" & bundleIDofCleanupAfterQACompleteApp & "',0," & allowedOrAuthorizedFields & ",1,X'" & csreqForCleanupAfterQACompleteApp & "',NULL,0,'" & bundleIDofFinderApp & "',X'" & csreqForFinderApp & "',NULL," & currentUnixTime & footerFields & ");")
-				
-				if (freeGeekResetIsInstalled) then
-					-- Always grant "Free Geek Reset" AppleEvents/Automation TCC permissions for "System Events" (even if "Full Disk Access" and "Accessibility" TCC permissions were not granted above) since it needs them to quit all apps before auto-rebooting into Recovery even if only used with the Snapshot Reset technique.
-					-- And, of course, if it is used for the "Erase All Content & Settings" reset, then "System Events" AppleEvents/Automation TCC permissions are needed to automate the "Erase Assistant" app (and also to quit all apps).
-					set setUserTCCpermissionsCommands to (setUserTCCpermissionsCommands & "REPLACE INTO access VALUES('kTCCServiceAppleEvents','" & bundleIDofFreeGeekResetApp & "',0," & allowedOrAuthorizedFields & ",1,X'" & csreqForFreeGeekResetApp & "',NULL,0,'" & bundleIDofSystemEventsApp & "',X'" & csreqForSystemEventsApp & "',NULL," & currentUnixTime & footerFields & ");")
+				if (not needsAutomationAccess) then
+					try
+						tell application id "com.apple.systemevents" to every window -- To prompt for AppleEvents/Automation permission.
+					on error automationAccessErrorMessage number automationAccessErrorNumber
+						if ((automationAccessErrorNumber is equal to -1743) or (automationAccessErrorNumber is equal to -1712)) then
+							-- Error -1743 = Not authorized to send Apple events to app.
+							-- Error -1712 = AppleEvent timed out.
+							set needsAutomationAccess to true
+							set alreadyGrantedUserTCC to false
+						else
+							display alert ("Unexpected Error " & automationAccessErrorNumber) message automationAccessErrorMessage -- DEBUG
+						end if
+					end try
 				end if
 				
-				-- On pre-T2 Macs, Java (QA Helper) can access the Microphone to be able to do the Microphone Test.
-				set setUserTCCpermissionsCommands to (setUserTCCpermissionsCommands & "REPLACE INTO access VALUES('kTCCServiceMicrophone','" & bundleIDofQAHelperApp & "',0," & allowedOrAuthorizedFields & ",1,X'" & csreqForQAHelperApp & "',NULL,0,'UNUSED',NULL,0," & currentUnixTime & footerFields & ");")
-				-- On T2 and Apple Silcon Macs, Java (QA Helper) seems to not be able to request Microphone access and also can't even access the Microphone when permission is manually granted, so QuickTime automation will be used instead when the Microphone can't be accessed (since QuickTime can access the Microphone).
-				set setUserTCCpermissionsCommands to (setUserTCCpermissionsCommands & "REPLACE INTO access VALUES('kTCCServiceAppleEvents','" & bundleIDofQAHelperApp & "',0," & allowedOrAuthorizedFields & ",1,X'" & csreqForQAHelperApp & "',NULL,0,'" & bundleIDofQuickTimeApp & "',X'" & csreqForQuickTimeApp & "',NULL," & currentUnixTime & footerFields & ");")
-				-- Even though QA Helper should only need one or the other of Microphone or AppleEvents-QuickTime access, always grant both just in case (especially if things change in the future and a newer version Java can access the Microphone on T2 and Apple Silicon Macs).
+				-- NOTE: "System Settings" permission is not actually required on macOS 27 Golden Gate since it is Apple Silicon only and Startup Disk will never get cleared and need to be manually re-set.
 				
-				if (not isBigSurOrNewer) then
-					-- On Mojave and Catalina, QuickTime must be manually granted Microphone access, but on Big Sur and newer it's automatically granted access by macOS.
-					-- But, T2 Macs will never be allowed to install Catalina or older since the first admin cannot be prevented from being granted a Secure Token on those versions which would break Snapshot resetting, but keep this here just to be thorough since we are also always granted QA Helper AppleEvents-QuickTime access.
-					set setUserTCCpermissionsCommands to (setUserTCCpermissionsCommands & "REPLACE INTO access VALUES('kTCCServiceMicrophone','" & bundleIDofQuickTimeApp & "',0," & allowedOrAuthorizedFields & ",1,X'" & csreqForQuickTimeApp & "',NULL,0,'UNUSED',NULL,0," & currentUnixTime & footerFields & ");")
-				else if (isVenturaOrNewer and (not hasT2chip) and (not isAppleSilicon)) then
-					-- On macOS 13 Ventura, BUT ONLY on pre-T2 Macs, certain audio-related actions are prompting for Microphone access even though they don't actually access the microphone and continue to work properly when microphone access is DENIED.
-					-- So, pre-deny Microphone access for all these apps so that the technician is never interrupted with these unnecessary prompts and the apps are not granted access they do not actually need.
-					-- Here are some commands I found which prompt for Microphone access but still work when access is denied: AppleScript "set volume", shell command "afplay ...", shell command "system_profiler SPAudioDataType" (and there may be others I haven't encountered).
+				if (needsAutomationAccess) then
+					try
+						do shell script ("tccutil reset AppleEvents " & currentBundleIdentifier) -- Clear AppleEvents (Automation) for this app to be able to just relaunch and prompt again. Resetting TCC for specific bundle IDs should work on Mojave and newer, but does not actually work on Mojave because of a bug (http://www.openradar.me/6813106), but since we don't install Mojave and this will only run on Catalina and newer (where it works) then it's ok.
+					end try
+					try
+						activate
+					end try
+					try
+						do shell script "afplay /System/Library/Sounds/Basso.aiff > /dev/null 2>&1 &"
+					end try
+					try
+						display alert "“" & (name of me) & "” must be allowed to control and perform actions in “Finder”, “System Events”, and “System Settings” to be able to function." message "You will be prompted for all required access again when you relaunch “" & (name of me) & "”." buttons {"Quit", "Relaunch “" & (name of me) & "” & Prompt Again"} cancel button 1 default button 2
+						try
+							do shell script "osascript -e 'delay 0.5' -e 'repeat while (application \"" & (POSIX path of (path to me)) & "\" is running)' -e 'delay 0.5' -e 'end repeat' -e 'do shell script \"open -na \\\"" & (POSIX path of (path to me)) & "\\\"\"' > /dev/null 2>&1 &"
+						end try
+					end try
+					quit
+					delay 10
+				else if (not alreadyGrantedUserTCC) then
+					try
+						do shell script "mkdir " & (quoted form of buildInfoPath)
+					end try
 					
-					set unauthorizedFields to "0,3"
-					set setUserTCCpermissionsCommands to (setUserTCCpermissionsCommands & "REPLACE INTO access VALUES('kTCCServiceMicrophone','" & bundleIDofFreeGeekSetupApp & "',0," & unauthorizedFields & ",1,X'" & csreqForFreeGeekSetupApp & "',NULL,0,'UNUSED',NULL,0," & currentUnixTime & footerFields & ");")
-					set setUserTCCpermissionsCommands to (setUserTCCpermissionsCommands & "REPLACE INTO access VALUES('kTCCServiceMicrophone','" & bundleIDofFreeGeekUpdaterApp & "',0," & unauthorizedFields & ",1,X'" & csreqForFreeGeekUpdaterApp & "',NULL,0,'UNUSED',NULL,0," & currentUnixTime & footerFields & ");")
-					if (snapshotHelperIsInstalled) then set setUserTCCpermissionsCommands to (setUserTCCpermissionsCommands & "REPLACE INTO access VALUES('kTCCServiceMicrophone','" & bundleIDofFreeGeekSnapshotHelperApp & "',0," & unauthorizedFields & ",1,X'" & csreqForFreeGeekSnapshotHelperApp & "',NULL,0,'UNUSED',NULL,0," & currentUnixTime & footerFields & ");")
-					set setUserTCCpermissionsCommands to (setUserTCCpermissionsCommands & "REPLACE INTO access VALUES('kTCCServiceMicrophone','" & bundleIDofFreeGeekDemoHelperApp & "',0," & unauthorizedFields & ",1,X'" & csreqForFreeGeekDemoHelperApp & "',NULL,0,'UNUSED',NULL,0," & currentUnixTime & footerFields & ");")
-					if (taskRunnerIsInstalled) then set setUserTCCpermissionsCommands to (setUserTCCpermissionsCommands & "REPLACE INTO access VALUES('kTCCServiceMicrophone','" & bundleIDofFreeGeekTaskRunnerApp & "',0," & unauthorizedFields & ",1,X'" & csreqForFreeGeekTaskRunnerApp & "',NULL,0,'UNUSED',NULL,0," & currentUnixTime & footerFields & ");")
-					set setUserTCCpermissionsCommands to (setUserTCCpermissionsCommands & "REPLACE INTO access VALUES('kTCCServiceMicrophone','" & bundleIDofCleanupAfterQACompleteApp & "',0," & unauthorizedFields & ",1,X'" & csreqForCleanupAfterQACompleteApp & "',NULL,0,'UNUSED',NULL,0," & currentUnixTime & footerFields & ");")
+					try
+						doShellScriptAsAdmin("touch " & (quoted form of (buildInfoPath & ".fgSetupGrantedUserTCC")))
+						set alreadyGrantedUserTCC to true
+					end try
+					try
+						doShellScriptAsAdmin("touch " & (quoted form of (buildInfoPath & ".fgSetupJustGrantedUserTCC")))
+					end try
+					
+					repeat
+						try
+							(((buildInfoPath & ".fgDemoHelperGrantedUserTCC") as POSIX file) as alias)
+							exit repeat
+						on error
+							try
+								((demoHelperAppPath as POSIX file) as alias)
+								
+								if (application demoHelperAppPath is not running) then
+									-- For some reason, on Big Sur, apps are not opening unless we specify "-n" to "Open a new instance of the application(s) even if one is already running." All scripts have LSMultipleInstancesProhibited so this will not actually ever open a new instance.
+									do shell script ("open -na " & (quoted form of demoHelperAppPath))
+								end if
+								
+								delay 3
+							on error
+								exit repeat
+							end try
+						end try
+					end repeat
+					
+					repeat
+						try
+							(((buildInfoPath & ".fgCleanupGrantedUserTCC") as POSIX file) as alias)
+							exit repeat
+						on error
+							try
+								((cleanupAppPath as POSIX file) as alias)
+								
+								if (application cleanupAppPath is not running) then
+									-- For some reason, on Big Sur, apps are not opening unless we specify "-n" to "Open a new instance of the application(s) even if one is already running." All scripts have LSMultipleInstancesProhibited so this will not actually ever open a new instance.
+									do shell script ("open -na " & (quoted form of cleanupAppPath))
+								end if
+								
+								delay 3
+							on error
+								exit repeat
+							end try
+						end try
+					end repeat
+					
+					repeat
+						try
+							(((buildInfoPath & ".fgResetGrantedUserTCC") as POSIX file) as alias)
+							exit repeat
+						on error
+							try
+								((freeGeekResetAppPath as POSIX file) as alias)
+								
+								if (application freeGeekResetAppPath is not running) then
+									-- For some reason, on Big Sur, apps are not opening unless we specify "-n" to "Open a new instance of the application(s) even if one is already running." All scripts have LSMultipleInstancesProhibited so this will not actually ever open a new instance.
+									do shell script ("open -na " & (quoted form of freeGeekResetAppPath))
+								end if
+								
+								delay 3
+							on error
+								exit repeat
+							end try
+						end try
+					end repeat
+					
+					-- Relaunch Free Geek Setup to be sure that it is launched with all the TCC permissions that we've just granted to it.
+					try
+						do shell script "osascript -e 'delay 0.5' -e 'repeat while (application \"" & (POSIX path of (path to me)) & "\" is running)' -e 'delay 0.5' -e 'end repeat' -e 'do shell script \"open -na \\\"" & (POSIX path of (path to me)) & "\\\"\"' > /dev/null 2>&1 &"
+					end try
+					quit
+					delay 10
 				end if
+			else
+				set userTCCdbPath to ((POSIX path of (path to library folder from user domain)) & "Application Support/com.apple.TCC/TCC.db")
+				set userTCCallowedAppsAndServices to (paragraphs of (do shell script ("sqlite3 " & (quoted form of userTCCdbPath) & " 'SELECT client,service,indirect_object_identifier FROM access WHERE (" & whereAllowedOrAuthValue & ")'"))) -- This SELECT command on the user TCC.db will error if "Free Geek Setup" doesn't have Full Disk Access (but that should never happen because we couldn't get this far without FDA).
 				
-				set setUserTCCpermissionsCommands to (setUserTCCpermissionsCommands & "COMMIT;")
+				set bundleIDofQAHelperApp to "org.freegeek.QA-Helper"
 				
-				do shell script ("echo " & (quoted form of setUserTCCpermissionsCommands) & " | sqlite3 " & (quoted form of userTCCdbPath)) -- Since we're using REPLACE INTO it shouldn't matter if any rows already exists, even if they're not allowed/authorized they will be overwritten with our allowed/authorized line.
+				set bundleIDofSystemEventsApp to "com.apple.systemevents"
+				set bundleIDofFinderApp to "com.apple.finder"
+				set bundleIDofSystemPreferencesOrSettingsApp to "com.apple.systempreferences" -- The bundle ID for the new "System Settings" app in Ventura is the same as the previous "System Preferences" app.
+				set bundleIDofQuickTimeApp to "com.apple.QuickTimePlayerX"
 				
 				try
-					do shell script "mkdir " & (quoted form of buildInfoPath)
+					if (userTCCallowedAppsAndServices does not contain (bundleIDofFreeGeekSetupApp & "|kTCCServiceAppleEvents|" & bundleIDofSystemEventsApp)) then error ("“" & (name of me) & "” WAS NOT GRANTED REQUIRED AppleEvents/Automation Access for “System Events”")
+					if (userTCCallowedAppsAndServices does not contain (bundleIDofFreeGeekSetupApp & "|kTCCServiceAppleEvents|" & bundleIDofFinderApp)) then error ("“" & (name of me) & "” WAS NOT GRANTED REQUIRED AppleEvents/Automation Access for “Finder”")
+					if (userTCCallowedAppsAndServices does not contain (bundleIDofFreeGeekSetupApp & "|kTCCServiceAppleEvents|" & bundleIDofSystemPreferencesOrSettingsApp)) then error ("“" & (name of me) & "”  WAS NOT GRANTED REQUIRED AppleEvents/Automation Access for “" & (name of application id bundleIDofSystemPreferencesOrSettingsApp) & "”") -- Use "name of application id" to correctly display "System Preferences" or "System Settings" depending on macOS version.
+					
+					if (userTCCallowedAppsAndServices does not contain (bundleIDofFreeGeekDemoHelperApp & "|kTCCServiceAppleEvents|" & bundleIDofSystemEventsApp)) then error "“Free Geek Demo Helper” WAS NOT GRANTED REQUIRED AppleEvents/Automation Access for “System Events”"
+					if (userTCCallowedAppsAndServices does not contain (bundleIDofFreeGeekDemoHelperApp & "|kTCCServiceAppleEvents|" & bundleIDofFinderApp)) then error "“Free Geek Demo Helper” WAS NOT GRANTED REQUIRED AppleEvents/Automation Access for “Finder”"
+					
+					if (userTCCallowedAppsAndServices does not contain (bundleIDofCleanupAfterQACompleteApp & "|kTCCServiceAppleEvents|" & bundleIDofSystemEventsApp)) then error "“Cleanup After QA Complete” WAS NOT GRANTED REQUIRED AppleEvents/Automation Access for “System Events”"
+					if (userTCCallowedAppsAndServices does not contain (bundleIDofCleanupAfterQACompleteApp & "|kTCCServiceAppleEvents|" & bundleIDofFinderApp)) then error "“Cleanup After QA Complete” WAS NOT GRANTED REQUIRED AppleEvents/Automation Access for “Finder”"
+					
+					-- See comments below about both Microphone AND AppleEvents-QuickTime permissions for QA Helper.
+					if (userTCCallowedAppsAndServices does not contain (bundleIDofQAHelperApp & "|kTCCServiceMicrophone|UNUSED")) then error "“QA Helper” WAS NOT GRANTED REQUIRED Microphone Access"
+					if (userTCCallowedAppsAndServices does not contain (bundleIDofQAHelperApp & "|kTCCServiceAppleEvents|" & bundleIDofQuickTimeApp)) then error "“QA Helper” WAS NOT GRANTED REQUIRED AppleEvents/Automation Access for “System Events”"
+					if (not isBigSurOrNewer) then -- See comments below about QuickTime needing manual Microphone access on Mojave and Catalina, but not Big Sur and newer.
+						if (userTCCallowedAppsAndServices does not contain (bundleIDofQuickTimeApp & "|kTCCServiceMicrophone|UNUSED")) then error "“QuickTime Player” WAS NOT GRANTED REQUIRED Microphone Access"
+					else if (isVenturaOrNewer and (not hasT2chip) and (not isAppleSilicon)) then
+						-- See comments below about apps unneccessarily prompting for Microphone on pre-T2 Macs running Ventura.
+						set userTCCunauthorizedAppsAndServices to (paragraphs of (do shell script ("sqlite3 " & (quoted form of userTCCdbPath) & " 'SELECT client,service FROM access WHERE (auth_value = 0)'"))) -- This SELECT command on the user TCC.db will error if "Free Geek Setup" doesn't have Full Disk Access (but that should never happen because we couldn't get this far without FDA).
+						if (userTCCunauthorizedAppsAndServices does not contain (bundleIDofFreeGeekSetupApp & "|kTCCServiceMicrophone")) then error "“Free Geek Setup” WAS NOT DENIED Microphone Access"
+						if (userTCCunauthorizedAppsAndServices does not contain (bundleIDofFreeGeekUpdaterApp & "|kTCCServiceMicrophone")) then error "“Free Geek Updater” WAS NOT DENIED Microphone Access"
+						if (snapshotHelperIsInstalled and (userTCCunauthorizedAppsAndServices does not contain (bundleIDofFreeGeekSnapshotHelperApp & "|kTCCServiceMicrophone"))) then error "“Free Geek Snapshot Helper” WAS NOT DENIED Microphone Access"
+						if (userTCCunauthorizedAppsAndServices does not contain (bundleIDofFreeGeekDemoHelperApp & "|kTCCServiceMicrophone")) then error "“Free Geek Demo Helper” WAS NOT DENIED Microphone Access"
+						if (taskRunnerIsInstalled and (userTCCunauthorizedAppsAndServices does not contain (bundleIDofFreeGeekTaskRunnerApp & "|kTCCServiceMicrophone"))) then error "“Free Geek Task Runner” WAS NOT DENIED Microphone Access"
+						if (userTCCunauthorizedAppsAndServices does not contain (bundleIDofCleanupAfterQACompleteApp & "|kTCCServiceMicrophone")) then error "“Cleanup After QA Complete” WAS NOT DENIED Microphone Access"
+					end if
+				on error checkUserTCCErrorMessage
+					if (didJustGrantUserTCC) then error checkUserTCCErrorMessage
+					
+					-- The following csreq (Code Signing Requirement) hex strings were generated by https://github.com/freegeek-pdx/macOS-Testing-and-Deployment-Scripts/blob/main/Other%20Scripts/generate_csreq_hex_for_tcc_db.jxa
+					-- See comments in the "generate_csreq_hex_for_tcc_db.jxa" script for some important detailed information about these csreq hex strings (and https://developer.apple.com/documentation/technotes/tn3127-inside-code-signing-requirements).
+					
+					-- The following apps are the CLIENT apps that will be sending AppleEvents (or accessing the Microphone).
+					-- Including the csreq for the client seems to NOT actually be required when initially setting the TCC permissions and macOS will fill them out when the app launches for the first time.
+					-- But, that would reduce security by allowing any app that's first to launch with the specified Bundle Identifier to be granted the specified TCC permissions (even though fraudulent apps spoofing our Bundle IDs isn't a risk in our environment).
+					set csreqForFreeGeekSetupApp to "fade0c00000000a80000000100000006000000020000001c6f72672e667265656765656b2e467265652d4765656b2d5365747570000000060000000f000000060000000e000000010000000a2a864886f76364060206000000000000000000060000000e000000000000000a2a864886f7636406010d0000000000000000000b000000000000000a7375626a6563742e4f550000000000010000000a595257364e55474136330000"
+					set csreqForFreeGeekUpdaterApp to "fade0c00000000ac0000000100000006000000020000001e6f72672e667265656765656b2e467265652d4765656b2d557064617465720000000000060000000f000000060000000e000000010000000a2a864886f76364060206000000000000000000060000000e000000000000000a2a864886f7636406010d0000000000000000000b000000000000000a7375626a6563742e4f550000000000010000000a595257364e55474136330000"
+					set csreqForFreeGeekSnapshotHelperApp to "fade0c00000000b4000000010000000600000002000000266f72672e667265656765656b2e467265652d4765656b2d536e617073686f742d48656c7065720000000000060000000f000000060000000e000000010000000a2a864886f76364060206000000000000000000060000000e000000000000000a2a864886f7636406010d0000000000000000000b000000000000000a7375626a6563742e4f550000000000010000000a595257364e55474136330000"
+					set csreqForFreeGeekDemoHelperApp to "fade0c00000000b0000000010000000600000002000000226f72672e667265656765656b2e467265652d4765656b2d44656d6f2d48656c7065720000000000060000000f000000060000000e000000010000000a2a864886f76364060206000000000000000000060000000e000000000000000a2a864886f7636406010d0000000000000000000b000000000000000a7375626a6563742e4f550000000000010000000a595257364e55474136330000"
+					set csreqForFreeGeekTaskRunnerApp to "fade0c00000000b0000000010000000600000002000000226f72672e667265656765656b2e467265652d4765656b2d5461736b2d52756e6e65720000000000060000000f000000060000000e000000010000000a2a864886f76364060206000000000000000000060000000e000000000000000a2a864886f7636406010d0000000000000000000b000000000000000a7375626a6563742e4f550000000000010000000a595257364e55474136330000"
+					set csreqForCleanupAfterQACompleteApp to "fade0c00000000b4000000010000000600000002000000266f72672e667265656765656b2e436c65616e75702d41667465722d51412d436f6d706c6574650000000000060000000f000000060000000e000000010000000a2a864886f76364060206000000000000000000060000000e000000000000000a2a864886f7636406010d0000000000000000000b000000000000000a7375626a6563742e4f550000000000010000000a595257364e55474136330000"
+					set csreqForQAHelperApp to "fade0c00000000a4000000010000000600000002000000166f72672e667265656765656b2e51412d48656c7065720000000000060000000f000000060000000e000000010000000a2a864886f76364060206000000000000000000060000000e000000000000000a2a864886f7636406010d0000000000000000000b000000000000000a7375626a6563742e4f550000000000010000000a595257364e55474136330000"
+					set csreqForFreeGeekResetApp to "fade0c00000000a80000000100000006000000020000001c6f72672e667265656765656b2e467265652d4765656b2d5265736574000000060000000f000000060000000e000000010000000a2a864886f76364060206000000000000000000060000000e000000000000000a2a864886f7636406010d0000000000000000000b000000000000000a7375626a6563742e4f550000000000010000000a595257364e55474136330000"
+					
+					-- The following apps are the TARGET (or INDIRECT OBJECT) apps that the clients will be sending AppleEvents to.
+					-- Like the csreq's for the client, they also seem to not actually be required for the target/indirect_object, BUT if the indirect_object_code_identity is omitted, the permissions DON'T show up in the TCC Automation section of System Preferences even though the permissions still work (tested on both Catalina and Monterey).
+					set csreqForSystemEventsApp to "fade0c000000003400000001000000060000000200000016636f6d2e6170706c652e73797374656d6576656e7473000000000003"
+					set csreqForFinderApp to "fade0c000000002c00000001000000060000000200000010636f6d2e6170706c652e66696e64657200000003"
+					set csreqForSystemPreferencesOrSettingsApp to "fade0c00000000380000000100000006000000020000001b636f6d2e6170706c652e73797374656d707265666572656e6365730000000003" -- The csreq for the new "System Settings" app on Ventura is the same as the previous "System Preferences" app.
+					set csreqForQuickTimeApp to "fade0c00000000380000000100000006000000020000001a636f6d2e6170706c652e517569636b54696d65506c6179657258000000000003"
+					
+					set allowedOrAuthorizedFields to "1"
+					if (isBigSurOrNewer) then set allowedOrAuthorizedFields to "2,3"
+					
+					set currentUnixTime to (do shell script "date '+%s'")
+					
+					set footerFields to ""
+					if (isSonomaOrNewer) then set footerFields to (",NULL,NULL,'UNUSED'," & currentUnixTime)
+					
+					set setUserTCCpermissionsCommands to "BEGIN TRANSACTION;"
+					
+					set setUserTCCpermissionsCommands to (setUserTCCpermissionsCommands & "REPLACE INTO access VALUES('kTCCServiceAppleEvents','" & bundleIDofFreeGeekSetupApp & "',0," & allowedOrAuthorizedFields & ",1,X'" & csreqForFreeGeekSetupApp & "',NULL,0,'" & bundleIDofSystemEventsApp & "',X'" & csreqForSystemEventsApp & "',NULL," & currentUnixTime & footerFields & ");")
+					set setUserTCCpermissionsCommands to (setUserTCCpermissionsCommands & "REPLACE INTO access VALUES('kTCCServiceAppleEvents','" & bundleIDofFreeGeekSetupApp & "',0," & allowedOrAuthorizedFields & ",1,X'" & csreqForFreeGeekSetupApp & "',NULL,0,'" & bundleIDofFinderApp & "',X'" & csreqForFinderApp & "',NULL," & currentUnixTime & footerFields & ");")
+					set setUserTCCpermissionsCommands to (setUserTCCpermissionsCommands & "REPLACE INTO access VALUES('kTCCServiceAppleEvents','" & bundleIDofFreeGeekSetupApp & "',0," & allowedOrAuthorizedFields & ",1,X'" & csreqForFreeGeekSetupApp & "',NULL,0,'" & bundleIDofSystemPreferencesOrSettingsApp & "',X'" & csreqForSystemPreferencesOrSettingsApp & "',NULL," & currentUnixTime & footerFields & ");")
+					
+					set setUserTCCpermissionsCommands to (setUserTCCpermissionsCommands & "REPLACE INTO access VALUES('kTCCServiceAppleEvents','" & bundleIDofFreeGeekDemoHelperApp & "',0," & allowedOrAuthorizedFields & ",1,X'" & csreqForFreeGeekDemoHelperApp & "',NULL,0,'" & bundleIDofSystemEventsApp & "',X'" & csreqForSystemEventsApp & "',NULL," & currentUnixTime & footerFields & ");")
+					set setUserTCCpermissionsCommands to (setUserTCCpermissionsCommands & "REPLACE INTO access VALUES('kTCCServiceAppleEvents','" & bundleIDofFreeGeekDemoHelperApp & "',0," & allowedOrAuthorizedFields & ",1,X'" & csreqForFreeGeekDemoHelperApp & "',NULL,0,'" & bundleIDofFinderApp & "',X'" & csreqForFinderApp & "',NULL," & currentUnixTime & footerFields & ");")
+					
+					set setUserTCCpermissionsCommands to (setUserTCCpermissionsCommands & "REPLACE INTO access VALUES('kTCCServiceAppleEvents','" & bundleIDofCleanupAfterQACompleteApp & "',0," & allowedOrAuthorizedFields & ",1,X'" & csreqForCleanupAfterQACompleteApp & "',NULL,0,'" & bundleIDofSystemEventsApp & "',X'" & csreqForSystemEventsApp & "',NULL," & currentUnixTime & footerFields & ");")
+					set setUserTCCpermissionsCommands to (setUserTCCpermissionsCommands & "REPLACE INTO access VALUES('kTCCServiceAppleEvents','" & bundleIDofCleanupAfterQACompleteApp & "',0," & allowedOrAuthorizedFields & ",1,X'" & csreqForCleanupAfterQACompleteApp & "',NULL,0,'" & bundleIDofFinderApp & "',X'" & csreqForFinderApp & "',NULL," & currentUnixTime & footerFields & ");")
+					
+					if (freeGeekResetIsInstalled) then
+						-- Always grant "Free Geek Reset" AppleEvents/Automation TCC permissions for "System Events" (even if "Full Disk Access" and "Accessibility" TCC permissions were not granted above) since it needs them to quit all apps before auto-rebooting into Recovery even if only used with the Snapshot Reset technique.
+						-- And, of course, if it is used for the "Erase All Content & Settings" reset, then "System Events" AppleEvents/Automation TCC permissions are needed to automate the "Erase Assistant" app (and also to quit all apps).
+						set setUserTCCpermissionsCommands to (setUserTCCpermissionsCommands & "REPLACE INTO access VALUES('kTCCServiceAppleEvents','" & bundleIDofFreeGeekResetApp & "',0," & allowedOrAuthorizedFields & ",1,X'" & csreqForFreeGeekResetApp & "',NULL,0,'" & bundleIDofSystemEventsApp & "',X'" & csreqForSystemEventsApp & "',NULL," & currentUnixTime & footerFields & ");")
+					end if
+					
+					-- On pre-T2 Macs, Java (QA Helper) can access the Microphone to be able to do the Microphone Test.
+					set setUserTCCpermissionsCommands to (setUserTCCpermissionsCommands & "REPLACE INTO access VALUES('kTCCServiceMicrophone','" & bundleIDofQAHelperApp & "',0," & allowedOrAuthorizedFields & ",1,X'" & csreqForQAHelperApp & "',NULL,0,'UNUSED',NULL,0," & currentUnixTime & footerFields & ");")
+					-- On T2 and Apple Silcon Macs, Java (QA Helper) seems to not be able to request Microphone access and also can't even access the Microphone when permission is manually granted, so QuickTime automation will be used instead when the Microphone can't be accessed (since QuickTime can access the Microphone).
+					set setUserTCCpermissionsCommands to (setUserTCCpermissionsCommands & "REPLACE INTO access VALUES('kTCCServiceAppleEvents','" & bundleIDofQAHelperApp & "',0," & allowedOrAuthorizedFields & ",1,X'" & csreqForQAHelperApp & "',NULL,0,'" & bundleIDofQuickTimeApp & "',X'" & csreqForQuickTimeApp & "',NULL," & currentUnixTime & footerFields & ");")
+					-- Even though QA Helper should only need one or the other of Microphone or AppleEvents-QuickTime access, always grant both just in case (especially if things change in the future and a newer version Java can access the Microphone on T2 and Apple Silicon Macs).
+					
+					if (not isBigSurOrNewer) then
+						-- On Mojave and Catalina, QuickTime must be manually granted Microphone access, but on Big Sur and newer it's automatically granted access by macOS.
+						-- But, T2 Macs will never be allowed to install Catalina or older since the first admin cannot be prevented from being granted a Secure Token on those versions which would break Snapshot resetting, but keep this here just to be thorough since we are also always granted QA Helper AppleEvents-QuickTime access.
+						set setUserTCCpermissionsCommands to (setUserTCCpermissionsCommands & "REPLACE INTO access VALUES('kTCCServiceMicrophone','" & bundleIDofQuickTimeApp & "',0," & allowedOrAuthorizedFields & ",1,X'" & csreqForQuickTimeApp & "',NULL,0,'UNUSED',NULL,0," & currentUnixTime & footerFields & ");")
+					else if (isVenturaOrNewer and (not hasT2chip) and (not isAppleSilicon)) then
+						-- On macOS 13 Ventura, BUT ONLY on pre-T2 Macs, certain audio-related actions are prompting for Microphone access even though they don't actually access the microphone and continue to work properly when microphone access is DENIED.
+						-- So, pre-deny Microphone access for all these apps so that the technician is never interrupted with these unnecessary prompts and the apps are not granted access they do not actually need.
+						-- Here are some commands I found which prompt for Microphone access but still work when access is denied: AppleScript "set volume", shell command "afplay ...", shell command "system_profiler SPAudioDataType" (and there may be others I haven't encountered).
+						
+						set unauthorizedFields to "0,3"
+						set setUserTCCpermissionsCommands to (setUserTCCpermissionsCommands & "REPLACE INTO access VALUES('kTCCServiceMicrophone','" & bundleIDofFreeGeekSetupApp & "',0," & unauthorizedFields & ",1,X'" & csreqForFreeGeekSetupApp & "',NULL,0,'UNUSED',NULL,0," & currentUnixTime & footerFields & ");")
+						set setUserTCCpermissionsCommands to (setUserTCCpermissionsCommands & "REPLACE INTO access VALUES('kTCCServiceMicrophone','" & bundleIDofFreeGeekUpdaterApp & "',0," & unauthorizedFields & ",1,X'" & csreqForFreeGeekUpdaterApp & "',NULL,0,'UNUSED',NULL,0," & currentUnixTime & footerFields & ");")
+						if (snapshotHelperIsInstalled) then set setUserTCCpermissionsCommands to (setUserTCCpermissionsCommands & "REPLACE INTO access VALUES('kTCCServiceMicrophone','" & bundleIDofFreeGeekSnapshotHelperApp & "',0," & unauthorizedFields & ",1,X'" & csreqForFreeGeekSnapshotHelperApp & "',NULL,0,'UNUSED',NULL,0," & currentUnixTime & footerFields & ");")
+						set setUserTCCpermissionsCommands to (setUserTCCpermissionsCommands & "REPLACE INTO access VALUES('kTCCServiceMicrophone','" & bundleIDofFreeGeekDemoHelperApp & "',0," & unauthorizedFields & ",1,X'" & csreqForFreeGeekDemoHelperApp & "',NULL,0,'UNUSED',NULL,0," & currentUnixTime & footerFields & ");")
+						if (taskRunnerIsInstalled) then set setUserTCCpermissionsCommands to (setUserTCCpermissionsCommands & "REPLACE INTO access VALUES('kTCCServiceMicrophone','" & bundleIDofFreeGeekTaskRunnerApp & "',0," & unauthorizedFields & ",1,X'" & csreqForFreeGeekTaskRunnerApp & "',NULL,0,'UNUSED',NULL,0," & currentUnixTime & footerFields & ");")
+						set setUserTCCpermissionsCommands to (setUserTCCpermissionsCommands & "REPLACE INTO access VALUES('kTCCServiceMicrophone','" & bundleIDofCleanupAfterQACompleteApp & "',0," & unauthorizedFields & ",1,X'" & csreqForCleanupAfterQACompleteApp & "',NULL,0,'UNUSED',NULL,0," & currentUnixTime & footerFields & ");")
+					end if
+					
+					set setUserTCCpermissionsCommands to (setUserTCCpermissionsCommands & "COMMIT;")
+					
+					do shell script ("echo " & (quoted form of setUserTCCpermissionsCommands) & " | sqlite3 " & (quoted form of userTCCdbPath)) -- Since we're using REPLACE INTO it shouldn't matter if any rows already exists, even if they're not allowed/authorized they will be overwritten with our allowed/authorized line.
+					
+					try
+						do shell script "mkdir " & (quoted form of buildInfoPath)
+					end try
+					try
+						doShellScriptAsAdmin("touch " & (quoted form of (buildInfoPath & ".fgSetupJustGrantedUserTCC")))
+					end try
+					
+					-- Relaunch Free Geek Setup to be sure that it is launched with all the TCC permissions that we've just granted to it.
+					try
+						do shell script "osascript -e 'delay 0.5' -e 'repeat while (application \"" & (POSIX path of (path to me)) & "\" is running)' -e 'delay 0.5' -e 'end repeat' -e 'do shell script \"open -na \\\"" & (POSIX path of (path to me)) & "\\\"\"' > /dev/null 2>&1 &"
+					end try
+					quit
+					delay 10
 				end try
-				try
-					doShellScriptAsAdmin("touch " & (quoted form of (buildInfoPath & ".fgSetupJustGrantedUserTCC")))
-				end try
-				
-				-- Relaunch Free Geek Setup to be sure that it is launched with all the TCC permissions that we've just granted to it.
-				try
-					do shell script "osascript -e 'delay 0.5' -e 'repeat while (application \"" & (POSIX path of (path to me)) & "\" is running)' -e 'delay 0.5' -e 'end repeat' -e 'do shell script \"open -na \\\"" & (POSIX path of (path to me)) & "\\\"\"' > /dev/null 2>&1 &"
-				end try
-				quit
-				delay 10
-			end try
+			end if
 		end if
 	on error tccErrorMessage
 		if (tccErrorMessage starts with "Error: unable to open database") then set tccErrorMessage to ("“" & (name of me) & "” DOES NOT HAVE REQUIRED Full Disk Access (" & tccErrorMessage & ")")
 		
 		try
-			try
-				activate
-			end try
-			try
-				do shell script "afplay /System/Library/Sounds/Basso.aiff > /dev/null 2>&1 &"
-			end try
+			activate
+		end try
+		try
+			do shell script "afplay /System/Library/Sounds/Basso.aiff > /dev/null 2>&1 &"
+		end try
+		
+		try
 			display alert ("CRITICAL “" & (name of me) & "” TCC ERROR:
 
 " & tccErrorMessage) message "This should not have happened, please inform and deliver this Mac to Free Geek I.T. for further research if trying again does not work." buttons {"Shut Down", "Try Again"} cancel button 1 default button 2 as critical giving up after 10
@@ -571,6 +725,34 @@ killall ControlStrip
 		quit
 		delay 10
 	end try
+	
+	if (isGoldenGateOrNewer and (not alreadyGrantedUserTCC)) then
+		try
+			do shell script ("tccutil reset AppleEvents " & currentBundleIdentifier) -- Clear AppleEvents (Automation) for this app to be able to just relaunch and prompt again. Resetting TCC for specific bundle IDs should work on Mojave and newer, but does not actually work on Mojave because of a bug (http://www.openradar.me/6813106), but since we don't install Mojave and this will only run on Catalina and newer (where it works) then it's ok.
+		end try
+		
+		try
+			activate
+		end try
+		try
+			do shell script "afplay /System/Library/Sounds/Basso.aiff > /dev/null 2>&1 &"
+		end try
+		
+		try
+			display alert ("CRITICAL “" & (name of me) & "” TCC ERROR:
+
+“" & (name of me) & "” must be allowed to control and perform actions in “Finder”, “System Events”, and “System Settings” to be able to function.") message "You will be prompted for all required access again when you relaunch “" & (name of me) & "”.
+
+This should not have happened, please inform and deliver this Mac to Free Geek I.T. for further research if prompting again does not work." buttons {"Shut Down", "Relaunch “" & (name of me) & "” & Prompt Again"} cancel button 1 default button 2 as critical giving up after 10
+			try
+				do shell script "osascript -e 'delay 0.5' -e 'repeat while (application \"" & (POSIX path of (path to me)) & "\" is running)' -e 'delay 0.5' -e 'end repeat' -e 'do shell script \"open -na \\\"" & (POSIX path of (path to me)) & "\\\"\"' > /dev/null 2>&1 &"
+			end try
+		on error
+			tell application id "com.apple.systemevents" to shut down with state saving preference
+		end try
+		quit
+		delay 10
+	end if
 	
 	-- Unmount any fgMIB, Install macOS, or MacLand Boot drives (this can now work on Big Sur and newer as well since this app will have Full Disk Access and access to removable drives wouldn't need to be manually approved by the technician).
 	try
@@ -682,8 +864,6 @@ defaults write '/Users/" & demoUsername & "/Library/Containers/com.apple.Safari/
 			end try
 		end if
 	end if
-	
-	set demoHelperAppPath to ("/Users/" & demoUsername & "/Applications/Free Geek Demo Helper.app")
 	
 	try
 		try
@@ -1489,7 +1669,7 @@ System Integrity Protection (SIP) IS NOT enabled on this Apple Silicon Mac." mes
 						set hardwareItems to (first property list item of property list item "_items" of thisDataTypeProperties)
 						try
 							set serialNumber to ((value of property list item "serial_number" of hardwareItems) as text) -- https://www.macrumors.com/2010/04/16/apple-tweaks-serial-number-format-with-new-macbook-pro/
-							if (serialNumber is equal to "Not Available") then
+							if (serialNumber ends with "vailable") then -- In "system_profiler", Macs without a serial number will show as "Unavailable" on macOS 11 Big Sur and newer and as "Not Available" on macOS 10.15 Catalina and older.
 								set serialNumber to "UNKNOWNXXXXX"
 							else if ((length of serialNumber) < 8) then -- https://www.macrumors.com/2021/03/09/apple-randomized-serial-numbers-early-2021/
 								set serialNumber to "UNKNOWNXXXXX"
@@ -1587,7 +1767,19 @@ to check for Remote Management (ADE/DEP/MDM)." with administrator privileges)
 					if (isSonomaOrNewer) then -- macOS 14 Sonoma adds a FULL SCREEN Remote Management Enrollment prompt which is run by Setup Assistant, so quit Setup Assistant to close this prompt if it comes up.
 						try
 							(("/private/var/db/ConfigurationProfiles/Settings/.cloudConfigRecordFound" as POSIX file) as alias) -- Only need to check if Setup Assistant launched if an enrollment record was found, which would creat this file.
-							do shell script "for (( quit_setup_assistant_attempt = 0; quit_setup_assistant_attempt < 10; quit_setup_assistant_attempt ++ )); do sleep 1; killall 'Setup Assistant' > /dev/null 2>&1 && break; done; exit 0" with administrator privileges
+							
+							try
+								do shell script "for quit_setup_assistant_attempt in $(seq 1 30); do sleep 1; killall 'Setup Assistant' > /dev/null 2>&1 && break; done > /dev/null 2>&1 &" with administrator privileges
+							end try
+							
+							if (isTahoeTwentySixDotFourOrNewer) then
+								-- Starting on macOS 26.4 Tahoe, when the Remote Management enrollment prompt is launched, macOS will also set the ByHost "com.apple.loginwindow" preference "MiniBuddyLaunch" to "true",
+								-- which would trigger user Setup Assistant to launch on the next boot. On Apple Silicon that seems to show Wi-Fi and Apple Intelligence user Setup Assistant panes, and on T2 Intel it shows the Accessibility pane (even when "~/.skipbuddy" was created).
+								-- So, always set the ByHost "com.apple.loginwindow" preference "MiniBuddyLaunch" back to "false" whenever the Remote Management enrollment prompt was launched.
+								try
+									do shell script "for disable_mini_buddy_launch_attempt in $(seq 1 30); do sleep 1; if [ \"$(defaults -currentHost read 'com.apple.loginwindow' 'MiniBuddyLaunch' 2> /dev/null)\" = '1' ]; then defaults -currentHost write 'com.apple.loginwindow' 'MiniBuddyLaunch' -bool false && break; fi; done > /dev/null 2>&1 &"
+								end try
+							end if
 						end try
 					end if
 					

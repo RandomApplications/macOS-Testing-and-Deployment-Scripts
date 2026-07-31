@@ -16,7 +16,7 @@
 -- WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 --
 
--- Version: 2025.11.7-1
+-- Version: 2026.7.31-1
 
 -- Build Flag: LSUIElement
 -- Build Flag: IncludeSignedLauncher
@@ -141,14 +141,22 @@ if ((currentUsername is equal to "Tester") and ((POSIX path of (path to me)) is 
 	if (isMojaveOrNewer) then
 		set needsAutomationAccess to false
 		try
-			tell application id "com.apple.systemevents" to every window -- To prompt for Automation access on Mojave
+			tell application id "com.apple.systemevents" to every window -- To prompt for AppleEvents/Automation permission.
 		on error automationAccessErrorMessage number automationAccessErrorNumber
-			if (automationAccessErrorNumber is equal to -1743) then set needsAutomationAccess to true
+			if ((automationAccessErrorNumber is equal to -1743) or (automationAccessErrorNumber is equal to -1712)) then
+				-- Error -1743 = Not authorized to send Apple events to app.
+				-- Error -1712 = AppleEvent timed out.
+				set needsAutomationAccess to true
+			end if
 		end try
 		try
-			tell application id "com.apple.finder" to every window -- To prompt for Automation access on Mojave
+			tell application id "com.apple.finder" to every window -- To prompt for AppleEvents/Automation permission.
 		on error automationAccessErrorMessage number automationAccessErrorNumber
-			if (automationAccessErrorNumber is equal to -1743) then set needsAutomationAccess to true
+			if ((automationAccessErrorNumber is equal to -1743) or (automationAccessErrorNumber is equal to -1712)) then
+				-- Error -1743 = Not authorized to send Apple events to app.
+				-- Error -1712 = AppleEvent timed out.
+				set needsAutomationAccess to true
+			end if
 		end try
 		
 		if (needsAutomationAccess) then
@@ -267,7 +275,7 @@ USE THE FOLLOWING STEPS TO FIX THIS ISSUE:
 			-- The MTB version is NOT stored in a user accessable location so that it cannot be super easily manually edited.
 			set currentMTBversion to doShellScriptAsAdmin("cat '/private/var/root/.mtbVersion'") -- If the file doesn't exist, it's older than 20220726 which was the first version to include this file (version 20220705 stored the file at "/Users/Shared/.mtbVersion" and no MTB version file existed before that).
 			
-			set validMTBversions to {"20251105"}
+			set validMTBversions to {"20260422"}
 			if (validMTBversions does not contain currentMTBversion) then error "OUTDATED"
 		on error
 			set serialNumber to ""
@@ -446,10 +454,11 @@ echo '<dict/>' | # NOTE: Starting with this plist fragment '<dict/>' is a way to
 				tell application id "com.apple.systemevents" to tell property list file hardwareInfoPath
 					set hardwareItems to (first property list item of property list item "_items" of first property list item)
 					set serialNumber to ((value of property list item "serial_number" of hardwareItems) as text)
-					if (serialNumber is equal to "Not Available") then
+					if (serialNumber ends with "vailable") then -- In "system_profiler", Macs without a serial number will show as "Unavailable" on macOS 11 Big Sur and newer and as "Not Available" on macOS 10.15 Catalina and older.
 						try
 							set serialNumber to ((value of property list item "riser_serial_number" of hardwareItems) as text)
 							set serialNumber to (do shell script "echo '" & serialNumber & "' | tr -d '[:space:]'")
+							if (serialNumber ends with "vailable") then error "UNKNOWN SERIAL NUMBER"
 						on error
 							set serialNumber to "UNKNOWNSERIAL-" & (random number from 100 to 999)
 						end try

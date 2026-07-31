@@ -107,6 +107,7 @@ $model_name = '';
 $possible_model_names = [];
 $product_type = '';
 $model_ids = [];
+$power_adapter = '';
 
 $specs_url_base = 'https://support.apple.com/';
 $specs_url = '';
@@ -126,6 +127,7 @@ $docs_ids_cache_folder_path = $apple_model_cache_folder_path . '/docs-ids/';
 
 $every_marketing_model_name_and_docs_url_with_grouped_config_codes = every_marketing_model_name_and_docs_url_with_grouped_config_codes();
 $every_model_id_with_marketing_model_name_and_specs_id = every_model_id_with_marketing_model_name_and_specs_id();
+$power_adapters_for_model_ids = power_adapters_for_model_ids();
 
 if (($config_code || ($serial_length == 10)) && preg_match('/^[A-Z0-9]+$/', $serial)) {
 	if ($config_code) {
@@ -497,6 +499,22 @@ if ($model_id || $a_number) {
 	$error = 'No Serial or Model ID Specified';
 }
 
+if ($model_ids) {
+	foreach ($model_ids as $this_model_id) {
+		foreach ($power_adapters_for_model_ids as $this_power_adapter_for_model_ids) {
+			$this_power_adapter_and_model_ids = explode(';', $this_power_adapter_for_model_ids);
+			$this_power_adapter = array_shift($this_power_adapter_and_model_ids); // Shift off the first element which will be the Power Adapter separated from the Model IDs by ";".
+			$these_model_ids = explode(':', $this_power_adapter_and_model_ids[0]);
+			array_pop($these_model_ids); // Always remove the last element which will just be and empty string since every line ends with ":".
+
+			if (in_array($this_model_id, $these_model_ids)) {
+				$power_adapter = $this_power_adapter;
+				break;
+			}
+		}
+	}
+}
+
 $output_dict = [];
 
 if ($model_name) {
@@ -504,6 +522,7 @@ if ($model_name) {
 	if (count($possible_model_names) > 1) $output_dict['possible_models'] = $possible_model_names;
 	if ($product_type) $output_dict['product_type'] = $product_type;
 	if ($model_ids) $output_dict['model_ids'] = $model_ids;
+	if ($power_adapter) $output_dict['power_adapter'] = $power_adapter;
 	if ($docs_url) $output_dict['docs_url'] = $docs_url;
 	if ($image_url) $output_dict['image_url'] = $image_url;
 	if ($specs_url) $output_dict['specs_url'] = $specs_url;
@@ -1272,7 +1291,7 @@ function every_model_id_with_marketing_model_name_and_specs_id() {
 	// The following list is generated from: https://github.com/freegeek-pdx/macOS-Testing-and-Deployment-Scripts/blob/main/Other%20Scripts/get_every_model_id_with_marketing_model_name_from_appledb.sh
 	// And the full output from that script is here: https://github.com/freegeek-pdx/macOS-Testing-and-Deployment-Scripts/blob/main/Other%20Scripts/appledb-parsing-output/every_model_id_and_specs_id_with_marketing_model_name_from_appledb.txt
 	// which uses data from AppleDB.dev (https://github.com/littlebyteorg/appledb) MIT License (https://github.com/littlebyteorg/appledb/blob/main/LICENSE)
-	// List last updated 10/27/25
+	// List last updated 03/24/26
 	return [
 		'Accessory;unknown;unknown:Apple Pencil Pro:A2538:',
 		'Accessory;unknown;unknown:Apple Pencil (1st generation):A1603:',
@@ -1449,6 +1468,10 @@ function every_model_id_with_marketing_model_name_and_specs_id() {
 		'iPad;119892;iPad16,4:iPad Pro 11-inch (M4) Wi-Fi + Cellular:A2837:A3006:',
 		'iPad;119891;iPad16,5:iPad Pro 13-inch (M4) Wi-Fi:A2925:',
 		'iPad;119891;iPad16,6:iPad Pro 13-inch (M4) Wi-Fi + Cellular:A2926:A3007:',
+		'iPad;126471;iPad16,8:iPad Air 11-inch (M4) Wi-Fi:A3459:',
+		'iPad;126471;iPad16,9:iPad Air 11-inch (M4) Wi-Fi + Cellular:A3460:A3463:',
+		'iPad;126472;iPad16,10:iPad Air 13-inch (M4) Wi-Fi:A3461:',
+		'iPad;126472;iPad16,11:iPad Air 13-inch (M4) Wi-Fi + Cellular:A3462:A3464:',
 		'iPad;125406;iPad17,1:iPad Pro 11-inch Wi-Fi (M5):A3357:',
 		'iPad;125406;iPad17,2:iPad Pro 11-inch Wi-Fi + Cellular (M5):A3358:A3359:',
 		'iPad;125407;iPad17,3:iPad Pro 13-inch Wi-Fi (M5):A3360:',
@@ -1515,6 +1538,7 @@ function every_model_id_with_marketing_model_name_and_specs_id() {
 		'iPhone;125091;iPhone18,2:iPhone 17 Pro Max:A3257:A3525:A3526:A3527:',
 		'iPhone;125089;iPhone18,3:iPhone 17:A3258:A3519:A3520:A3521:',
 		'iPhone;125092;iPhone18,4:iPhone Air:A3260:A3516:A3517:A3518:',
+		'iPhone;126470;iPhone18,5:iPhone 17e:A3575:A3634:A3635:',
 		'iPod;unknown;iPod1,1:iPod touch (1st generation):A1213:',
 		'iPod;unknown;iPod2,1:iPod touch (2nd generation):A1288:A1319:',
 		'iPod;unknown;iPod3,1:iPod touch (3rd generation):A1318:',
@@ -1732,6 +1756,13 @@ function every_model_id_with_marketing_model_name_and_specs_id() {
 		'Mac Laptop;122209;Mac16,12:MacBook Air (13-inch, M4, 2025):A3240:',
 		'Mac Laptop;122210;Mac16,13:MacBook Air (15-inch, M4, 2025):A3241:',
 		'Mac Laptop;125405;Mac17,2:MacBook Pro 14-inch (M5):A3434:',
+		'Mac Laptop;126320;Mac17,3:MacBook Air (13-inch, M5):A3449:',
+		'Mac Laptop;126321;Mac17,4:MacBook Air (15-inch, M5):A3448:',
+		'Mac Laptop;126322;Mac17,5:MacBook Neo:A3404:',
+		'Mac Laptop;126319;Mac17,6:MacBook Pro (16-inch, M5 Max):A3429:',
+		'Mac Laptop;126318;Mac17,7:MacBook Pro (14-inch, M5 Max):A3427:',
+		'Mac Laptop;126319;Mac17,8:MacBook Pro (16-inch, M5 Pro):A3428:',
+		'Mac Laptop;126318;Mac17,9:MacBook Pro (14-inch, M5 Pro):A3426:',
 		'Mac Laptop;unknown;MacBook1,1:MacBook (13-inch, Mid 2006):A1181:',
 		'Mac Laptop;unknown;MacBook2,1:MacBook (13-inch, Late 2006):A1181:',
 		'Mac Laptop;unknown;MacBook2,1:MacBook (13-inch, Mid 2007):A1181:',
@@ -1879,6 +1910,32 @@ function every_model_id_with_marketing_model_name_and_specs_id() {
 		'Mac Server;unknown;Xserve1,1:Xserve (Late 2006):A1196:',
 		'Mac Server;unknown;Xserve2,1:Xserve (Early 2008):A1246:',
 		'Mac Server;unknown;Xserve3,1:Xserve (Early 2009):A1279:'
+	];
+}
+
+function power_adapters_for_model_ids() {
+	// The following list is generated from: https://github.com/freegeek-pdx/macOS-Testing-and-Deployment-Scripts/blob/main/Other%20Scripts/get_power_adapters_from_all_mac_specs_pages.sh
+	// List last updated 04/02/26
+	return [
+		'85W MagSafe 1;MacBookPro1,1:MacBookPro1,2:MacBookPro2,1:MacBookPro2,2:MacBookPro3,1:MacBookPro4,1:MacBookPro5,1:MacBookPro5,2:MacBookPro5,3:MacBookPro6,1:MacBookPro6,2:MacBookPro8,2:MacBookPro8,3:MacBookPro9,1:',
+		'60W MagSafe 1;MacBook1,1:MacBook2,1:MacBook3,1:MacBook4,1:MacBook5,1:MacBook5,2:MacBook6,1:MacBook7,1:MacBookPro5,4:MacBookPro5,5:MacBookPro7,1:MacBookPro8,1:MacBookPro9,2:',
+		'45W MagSafe 1;MacBookAir1,1:MacBookAir2,1:MacBookAir3,1:MacBookAir3,2:MacBookAir4,1:MacBookAir4,2:',
+		'85W MagSafe 2;MacBookPro10,1:MacBookPro11,2:MacBookPro11,3:MacBookPro11,4:MacBookPro11,5:',
+		'60W MagSafe 2;MacBookPro10,2:MacBookPro11,1:MacBookPro12,1:',
+		'45W MagSafe 2;MacBookAir5,1:MacBookAir5,2:MacBookAir6,1:MacBookAir6,2:MacBookAir7,1:MacBookAir7,2:',
+		'96W USB-C;MacBookPro16,1:MacBookPro16,4:',
+		'87W USB-C;MacBookPro13,3:MacBookPro14,3:MacBookPro15,1:MacBookPro15,3:',
+		'67W USB-C;Mac14,7:',
+		'61W USB-C;MacBookPro13,1:MacBookPro13,2:MacBookPro14,1:MacBookPro14,2:MacBookPro15,2:MacBookPro15,4:MacBookPro16,2:MacBookPro16,3:MacBookPro17,1:',
+		'30W USB-C;MacBook10,1:MacBookAir8,1:MacBookAir8,2:MacBookAir9,1:MacBookAir10,1:',
+		'29W USB-C;MacBook8,1:MacBook9,1:',
+		'20W USB-C;Mac17,5:',
+		'140W USB-C/MagSafe 3;Mac14,6:Mac14,10:Mac15,7:Mac15,9:Mac15,11:Mac16,5:Mac16,7:Mac17,6:Mac17,8:MacBookPro18,1:MacBookPro18,2:',
+		'67W or 96W USB-C/MagSafe 3;Mac14,5:Mac14,9:MacBookPro18,3:MacBookPro18,4:',
+		'70W or 96W USB-C/MagSafe 3;Mac15,3:Mac15,6:Mac15,8:Mac15,10:Mac16,1:Mac16,6:Mac16,8:Mac17,2:Mac17,7:Mac17,9:',
+		'30W or 35W Dual Port or 70W USB-C/MagSafe 3;Mac14,2:Mac15,12:Mac16,12:',
+		'35W Dual Port or 70W USB-C/MagSafe 3;Mac14,15:Mac15,13:Mac16,13:',
+		'35W Dual Port or 40W (with 60W Max) or 70W USB-C/MagSafe 3;Mac17,3:Mac17,4:'
 	];
 }
 

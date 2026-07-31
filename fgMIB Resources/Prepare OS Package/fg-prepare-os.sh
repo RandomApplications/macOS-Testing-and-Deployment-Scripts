@@ -30,7 +30,7 @@
 # Only run if running as root on first boot after OS installation, or on a clean installation prepared by fg-install-os.
 # IMPORTANT: If on a clean installation prepared by fg-install-os, AppleSetupDone will have been created to not show Setup Assistant while the package installations run via LaunchDaemon.
 
-readonly SCRIPT_VERSION='2025.12.5-1'
+readonly SCRIPT_VERSION='2026.6.11-1'
 
 PATH='/usr/bin:/bin:/usr/sbin:/sbin:/usr/libexec' # Add "/usr/libexec" to PATH for easy access to PlistBuddy.
 
@@ -970,6 +970,8 @@ if (( DARWIN_MAJOR_VERSION >= 17 )) && [[ ! -f '/private/var/db/.AppleSetupDone'
 		write_to_log 'Setting Computer Name'
 
 		is_laptop=false # This "is_laptop" variable will be set based on whether the "short model name" (machine_name) contains "Book", and it is used later in this script.
+		hardware_uuid="UNKNOWNUUID-$(jot -rs '' 3 0 9)"
+		serial_number="UNKNOWNSERIAL-$(jot -rs '' 3 0 9)"
 
 		sp_hardware_plist_path="${TMPDIR}fg-prepare-os-sp-hardware.plist"
 		for (( get_model_id_attempt = 0; get_model_id_attempt < 60; get_model_id_attempt ++ )); do
@@ -982,12 +984,17 @@ if (( DARWIN_MAJOR_VERSION >= 17 )) && [[ ! -f '/private/var/db/.AppleSetupDone'
 				short_model_name="$(PlistBuddy -c 'Print :0:_items:0:machine_name' "${sp_hardware_plist_path}" 2> /dev/null)"
 				if [[ "${short_model_name}" == *'Book'* ]]; then is_laptop=true; fi
 
+				hardware_uuid="$(PlistBuddy -c 'Print :0:_items:0:platform_UUID' "${sp_hardware_plist_path}" 2> /dev/null)"
+				if [[ -z "${hardware_uuid}" ]]; then
+					hardware_uuid="UNKNOWNUUID-$(jot -rs '' 3 0 9)"
+				fi
+
 				serial_number="$(PlistBuddy -c 'Print :0:_items:0:serial_number' "${sp_hardware_plist_path}" 2> /dev/null)"
 
-				if [[ -z "${serial_number}" || "${serial_number}" == 'Not Available' ]]; then
+				if [[ -z "${serial_number}" || "${serial_number}" == *'vailable' ]]; then # In "system_profiler", Macs without a serial number will show as "Unavailable" on macOS 11 Big Sur and newer and as "Not Available" on macOS 10.15 Catalina and older.
 					serial_number="$(PlistBuddy -c 'Print :0:_items:0:riser_serial_number' "${sp_hardware_plist_path}" 2> /dev/null)"
 
-					if [[ -z "${serial_number}" || "${serial_number}" == 'Not Available' ]]; then
+					if [[ -z "${serial_number}" || "${serial_number}" == *'vailable' ]]; then
 						serial_number="UNKNOWNSERIAL-$(jot -rs '' 3 0 9)"
 					fi
 				fi
@@ -1144,12 +1151,12 @@ if (( DARWIN_MAJOR_VERSION >= 17 )) && [[ ! -f '/private/var/db/.AppleSetupDone'
 				'--skip-setup-assistant'
 				'--prohibit-user-password-changes'
 				'--prohibit-user-picture-changes'
-				'--prevent-secure-token-on-big-sur-and-newer'
+				'--prevent-first-secure-token'
 				'--suppress-status-messages' # Don't output stdout messages, but we will still get stderr to save to variable.
 			)
 
-			# PREVENT SECURE TOKEN ON BIG SUR AND NEWER
-			# See comments in "mkuser.sh" for more information about preventing Secure Tokens on macOS 11 Big Sur.
+			# PREVENT FIRST SECURE TOKEN ON BIG SUR AND NEWER
+			# See comments in "mkuser.sh" for more information about preventing the first Secure Tokens on macOS 11 Big Sur.
 			# This is nice for being able to use Snapshot reset and having the customer user account get a Secure Token on macOS 11 Big Sur:
 			# Although, this DOES NOT work on macOS 10.15 Catalina. BUT, I found that I can remove the crypto user references after the users no longer exist (on non-SEP Macs)
 			# after restoring the reset Snapshot, so this isn't the only way to be able to do a Snapshot reset (on non-SEP Macs) and have the customer user account be able to get a Secure Token.
@@ -1196,7 +1203,7 @@ if (( DARWIN_MAJOR_VERSION >= 17 )) && [[ ! -f '/private/var/db/.AppleSetupDone'
 				# user creation instead of it being granted when the "Erase All Content & Settings" reset process is started by "Free Geek Reset" allows the reset to run more quickly and the user having
 				# a Secure Token is not an issue like it is with the Snapshot Reset process which would not be able to remove the Secure Token.
 
-				create_standard_autologin_user_options+=( '--prevent-secure-token-on-big-sur-and-newer' )
+				create_standard_autologin_user_options+=( '--prevent-first-secure-token' )
 			fi
 
 			create_standard_autologin_user_error="$(printf '%s' "${standard_autologin_user_password}" | "${mkuser_path}" "${create_standard_autologin_user_options[@]}" 2>&1)" # Redirect stderr to save to variable.
@@ -1570,7 +1577,8 @@ if (( DARWIN_MAJOR_VERSION >= 17 )) && [[ ! -f '/private/var/db/.AppleSetupDone'
 										launchctl asuser "${this_uid}" sudo -u "${this_username}" defaults write 'com.binaryfruit.DriveDx' DriveDx_OS_Mode -bool true # Sync diagnostics KB online.
 										launchctl asuser "${this_uid}" sudo -u "${this_username}" defaults write 'com.binaryfruit.DriveDx' App_Updater_CheckForUpdates -bool false # Do not check for updates.
 
-										ditto "${this_user_resources_folder}/Apps/darwin-all-versions/DriveDx.driveDxLicense" "${this_home_folder}/Library/Application Support/DriveDx/DriveDx.driveDxLicense" &> /dev/null # Do not need to "mkdir" first since "ditto" takes care of that automatically.
+										launchctl asuser "${this_uid}" sudo -u "${this_username}" ditto "${this_user_resources_folder}/Apps/darwin-all-versions/DriveDx.driveDxLicense" "${this_home_folder}/Library/Application Support/DriveDx/DriveDx.driveDxLicense" &> /dev/null # Do not need to "mkdir" first since "ditto" takes care of that automatically.
+										chown -R "${this_uid}:20" "${this_home_folder}/Library/Application Support"
 									else
 										write_to_log "WARNING: Uninstalling \"DriveDx\" App for \"${this_username}\" User Because License Not Found"
 										rm -rf "${this_user_apps_folder}/DriveDx.app"
@@ -1609,10 +1617,10 @@ if (( DARWIN_MAJOR_VERSION >= 17 )) && [[ ! -f '/private/var/db/.AppleSetupDone'
 
 								if [[ -d "${this_user_apps_folder}/Mactracker.app" ]]; then
 									write_to_log "Setting Preferences for \"Mactracker\" App for \"${this_username}\" User"
-									launchctl asuser "${this_uid}" sudo -u "${this_username}" defaults write 'com.mactrackerapp.Mactracker' 'SUCheckAtStartup' -bool false
-									launchctl asuser "${this_uid}" sudo -u "${this_username}" defaults write 'com.mactrackerapp.Mactracker' 'WindowLocations' -dict 'MainWindow' "$(echo '<dict/>' | # Search for "<dict/>" above in this script for comments about creating the plist this way.
+									launchctl asuser "${this_uid}" sudo -u "${this_username}" defaults write 'com.mactrackerapp.Mactracker' SUCheckAtStartup -bool false
+									launchctl asuser "${this_uid}" sudo -u "${this_username}" defaults write 'com.mactrackerapp.Mactracker' WindowLocations -dict 'MainWindow' "$(echo '<dict/>' | # Search for "<dict/>" above in this script for comments about creating the plist this way.
 										plutil -insert 'LastSelection' -integer '2' -o - -)" # Open to the "This Mac" section.
-									launchctl asuser "${this_uid}" sudo -u "${this_username}" defaults write 'com.mactrackerapp.Mactracker' 'MultipleFindMyMac' -bool false # Do not show alert if the Model ID matches multiple models on first open of "This Mac" section (which would be on first launch).
+									launchctl asuser "${this_uid}" sudo -u "${this_username}" defaults write 'com.mactrackerapp.Mactracker' MultipleFindMyMac -bool false # Do not show alert if the Model ID matches multiple models on first open of "This Mac" section (which would be on first launch).
 								fi
 
 								if [[ -d "${this_user_apps_folder}/KeyboardCleanTool.app" ]]; then
@@ -1670,29 +1678,126 @@ if (( DARWIN_MAJOR_VERSION >= 17 )) && [[ ! -f '/private/var/db/.AppleSetupDone'
 										"${this_user_launch_agents_folder}/org.freegeek.Free-Geek-Setup.plist" &> /dev/null
 								fi
 
-								if (( DARWIN_MAJOR_VERSION >= 25 )) && [[ -d "${this_user_apps_folder}/Free Geek Task Runner.app" && -d '/System/Library/UserNotifications/Bundles/com.apple.BTMNotificationAgent.bundle' ]]; then
+								if [[ -d "${this_user_apps_folder}/Free Geek Task Runner.app" ]]; then
+									if [[ -d '/private/var/db/ConfigurationProfiles/Settings' ]]; then
+										if (( DARWIN_MAJOR_VERSION >= 23 )); then
+											# macOS 14 Sonoma adds a full screen Remote Management enrollment prompt which is run by Setup Assistant,
+											# so whenever the files witin "/private/var/db/ConfigurationProfiles/Settings" are modified,
+											# check if Setup Assistant has been launched and quit it to close this prompt if it comes up.
 
-									write_to_log "Creating LaunchAgent to Disable BTM Notifications for \"${this_username}\" User"
+											write_to_log "Creating LaunchDaemon to Close Full Screen Remote Management Enrollment Prompt"
 
-									# NOTE: See comments in "SETUP FREE GEEK SETUP AUTO-LAUNCH" section above for information about "AssociatedBundleIdentifiers" to properly display in the Login Items section in macOS 13 Ventura, and using "LSRegisterURL" and "open" for the "Free Geek Task Runner" app name and icon properly show for the following LaunchAgent in the Login Items section.
-									osascript -l 'JavaScript' -e 'ObjC.import("LaunchServices"); run = argv => $.LSRegisterURL($.NSURL.fileURLWithPath(argv[0]), true)' -- "${this_user_apps_folder}/Free Geek Task Runner.app" &> /dev/null
-									launchctl asuser "${this_uid}" sudo -u "${this_username}" open -na "${this_user_apps_folder}/Free Geek Task Runner.app"
+											# NOTE: See comments in "SETUP FREE GEEK SETUP AUTO-LAUNCH" section above for information about "AssociatedBundleIdentifiers" to properly display in the Login Items section in macOS 13 Ventura, and using "LSRegisterURL" and "open" for the "Free Geek Task Runner" app name and icon properly show for the following LaunchAgent in the Login Items section.
+											osascript -l 'JavaScript' -e 'ObjC.import("LaunchServices"); run = argv => $.LSRegisterURL($.NSURL.fileURLWithPath(argv[0]), true)' -- "${this_user_apps_folder}/Free Geek Task Runner.app" &> /dev/null
+											launchctl asuser "${this_uid}" sudo -u "${this_username}" open -na "${this_user_apps_folder}/Free Geek Task Runner.app"
 
-									# NOTE: See comments in "DISABLE NOTIFICATIONS FOR BACKGROUND TASK MANAGEMENT" section above for information about why this LaunchAgent is being created on macOS 26 Tahoe to disable BTM notifications.
-									PlistBuddy \
-										-c 'Add :Label string org.freegeek.Disable-BTM-Notifications' \
-										-c 'Add :ProgramArguments array' \
-										-c "Add :ProgramArguments: string '${this_user_apps_folder}/Free Geek Task Runner.app/Contents/Resources/Launch Free Geek Task Runner'" \
-										-c "Add :ProgramArguments: string bash" \
-										-c 'Add :AssociatedBundleIdentifiers string org.freegeek.Free-Geek-Task-Runner' \
-										-c 'Add :RunAtLoad bool true' \
-										-c 'Add :WatchPaths array' \
-										-c "Add :WatchPaths: string '${this_home_folder}/Library/Group Containers/group.com.apple.usernoted/Library/Preferences/group.com.apple.usernoted.plist'" \
-										-c 'Add :StandardOutPath string /dev/null' \
-										-c 'Add :StandardErrorPath string /dev/null' \
-										"${this_user_launch_agents_folder}/org.freegeek.Disable-BTM-Notifications.plist" &> /dev/null
+											PlistBuddy \
+												-c 'Add :Label string org.freegeek.Close-Remote-Management-Enrollment-Prompt' \
+												-c 'Add :ProgramArguments array' \
+												-c "Add :ProgramArguments: string '${this_user_apps_folder}/Free Geek Task Runner.app/Contents/Resources/Launch Free Geek Task Runner'" \
+												-c "Add :ProgramArguments: string bash" \
+												-c 'Add :AssociatedBundleIdentifiers string org.freegeek.Free-Geek-Task-Runner' \
+												-c 'Add :RunAtLoad bool true' \
+												-c 'Add :WatchPaths array' \
+												-c "Add :WatchPaths: string '/private/var/db/ConfigurationProfiles/Settings/'" \
+												-c 'Add :StandardOutPath string /dev/null' \
+												-c 'Add :StandardErrorPath string /dev/null' \
+												'/Library/LaunchDaemons/org.freegeek.Close-Remote-Management-Enrollment-Prompt.plist' &> /dev/null
 
-									disable_btm_notifications_code="
+											close_remote_management_enrollment_prompt_code="
+PATH='/usr/bin:/bin:/usr/sbin:/sbin'
+
+if [[ -f '/private/var/db/ConfigurationProfiles/Settings/.cloudConfigRecordFound' ]]; then
+	for (( quit_setup_assistant_attempt = 0; quit_setup_assistant_attempt < 30; quit_setup_assistant_attempt ++ )); do
+		sleep 1
+		if killall 'Setup Assistant' &> /dev/null; then
+			break
+		fi
+	done
+fi
+"
+
+											plutil -insert 'ProgramArguments' -string "${close_remote_management_enrollment_prompt_code}" -append '/Library/LaunchDaemons/org.freegeek.Close-Remote-Management-Enrollment-Prompt.plist'
+											# Use "plutil" for script code that contains special xml/plist characters that need to be escaped.
+											# "PlistBuddy" would escape special xml/plist characters in values properly too, but because of how "PlistBuddy" values need to be specified inside of commands that
+											# are within a quoted string means that nested quotes in the values (which also exist) would need to be double escaped to not break the "PlistBuddy" commands themselves.
+											# That possible nested quoting issue doesn't exist with "plutil" because of how values are specified as their own separate argument rather than within commands like with "PlistBuddy".
+
+											if [[ ! -f '/Library/LaunchDaemons/org.freegeek.fg-install-packages.plist' ]]; then # Do not need to load right away if started via LaunchDaemon since we will restart.
+												launchctl bootstrap system '/Library/LaunchDaemons/org.freegeek.Close-Remote-Management-Enrollment-Prompt.plist'
+											fi
+										fi
+
+										if (( DARWIN_MAJOR_VERSION >= 25 )) && [[ "$(sw_vers -buildVersion)" > '25E' ]]; then
+											# Starting on macOS 26.4 Tahoe, when the Remote Management enrollment prompt is launched, macOS will also set the ByHost "com.apple.loginwindow" preference "MiniBuddyLaunch" to "true",
+											# which would trigger user Setup Assistant to launch on the next boot. On Apple Silicon that seems to show Wi-Fi and Apple Intelligence user Setup Assistant panes, and on T2 Intel it shows the Accessibility pane (even when "~/.skipbuddy" was created).
+											# So, always set the ByHost "com.apple.loginwindow" preference "MiniBuddyLaunch" back to "false" whenever the preference file is updated (which will happen after the Remote Management enrollment prompt was launched).
+
+											write_to_log "Creating LaunchDaemon to Disable Setup Assistant Launch on Next Boot After Remote Management Enrollment Prompt"
+
+											# NOTE: See comments in "SETUP FREE GEEK SETUP AUTO-LAUNCH" section above for information about "AssociatedBundleIdentifiers" to properly display in the Login Items section in macOS 13 Ventura, and using "LSRegisterURL" and "open" for the "Free Geek Task Runner" app name and icon properly show for the following LaunchAgent in the Login Items section.
+											osascript -l 'JavaScript' -e 'ObjC.import("LaunchServices"); run = argv => $.LSRegisterURL($.NSURL.fileURLWithPath(argv[0]), true)' -- "${this_user_apps_folder}/Free Geek Task Runner.app" &> /dev/null
+											launchctl asuser "${this_uid}" sudo -u "${this_username}" open -na "${this_user_apps_folder}/Free Geek Task Runner.app"
+
+											PlistBuddy \
+												-c 'Add :Label string org.freegeek.Disable-Setup-Assistant-After-Remote-Management-Enrollment-Prompt' \
+												-c 'Add :ProgramArguments array' \
+												-c "Add :ProgramArguments: string '${this_user_apps_folder}/Free Geek Task Runner.app/Contents/Resources/Launch Free Geek Task Runner'" \
+												-c "Add :ProgramArguments: string bash" \
+												-c 'Add :AssociatedBundleIdentifiers string org.freegeek.Free-Geek-Task-Runner' \
+												-c 'Add :RunAtLoad bool true' \
+												-c 'Add :WatchPaths array' \
+												-c "Add :WatchPaths: string '${this_home_folder}/Library/Preferences/ByHost/com.apple.loginwindow.${hardware_uuid}.plist'" \
+												-c 'Add :StandardOutPath string /dev/null' \
+												-c 'Add :StandardErrorPath string /dev/null' \
+												"${this_user_launch_agents_folder}/org.freegeek.Disable-Setup-Assistant-After-Remote-Management-Enrollment-Prompt.plist" &> /dev/null
+
+											disable_setup_assistant_after_remote_management_enrollment_prompt_code="
+PATH='/usr/bin:/bin:/usr/sbin:/sbin'
+
+if [[ -f '/private/var/db/ConfigurationProfiles/Settings/.cloudConfigRecordFound' ]]; then
+	for (( disable_mini_buddy_launch_attempt = 0; disable_mini_buddy_launch_attempt < 30; disable_mini_buddy_launch_attempt ++ )); do
+		sleep 1
+		if [[ \"\$(defaults -currentHost read 'com.apple.loginwindow' 'MiniBuddyLaunch' 2> /dev/null)\" == '1' ]]; then
+			defaults -currentHost write 'com.apple.loginwindow' 'MiniBuddyLaunch' -bool false
+			break
+		fi
+	done
+fi
+"
+
+											plutil -insert 'ProgramArguments' -string "${disable_setup_assistant_after_remote_management_enrollment_prompt_code}" -append "${this_user_launch_agents_folder}/org.freegeek.Disable-Setup-Assistant-After-Remote-Management-Enrollment-Prompt.plist"
+											# Use "plutil" for script code that contains special xml/plist characters that need to be escaped.
+											# "PlistBuddy" would escape special xml/plist characters in values properly too, but because of how "PlistBuddy" values need to be specified inside of commands that
+											# are within a quoted string means that nested quotes in the values (which also exist) would need to be double escaped to not break the "PlistBuddy" commands themselves.
+											# That possible nested quoting issue doesn't exist with "plutil" because of how values are specified as their own separate argument rather than within commands like with "PlistBuddy".
+										fi
+									fi
+
+
+									if (( DARWIN_MAJOR_VERSION >= 25 )) && [[ -d '/System/Library/UserNotifications/Bundles/com.apple.BTMNotificationAgent.bundle' ]]; then
+
+										write_to_log "Creating LaunchAgent to Disable BTM Notifications for \"${this_username}\" User"
+
+										# NOTE: See comments in "SETUP FREE GEEK SETUP AUTO-LAUNCH" section above for information about "AssociatedBundleIdentifiers" to properly display in the Login Items section in macOS 13 Ventura, and using "LSRegisterURL" and "open" for the "Free Geek Task Runner" app name and icon properly show for the following LaunchAgent in the Login Items section.
+										osascript -l 'JavaScript' -e 'ObjC.import("LaunchServices"); run = argv => $.LSRegisterURL($.NSURL.fileURLWithPath(argv[0]), true)' -- "${this_user_apps_folder}/Free Geek Task Runner.app" &> /dev/null
+										launchctl asuser "${this_uid}" sudo -u "${this_username}" open -na "${this_user_apps_folder}/Free Geek Task Runner.app"
+
+										# NOTE: See comments in "DISABLE NOTIFICATIONS FOR BACKGROUND TASK MANAGEMENT" section above for information about why this LaunchAgent is being created on macOS 26 Tahoe to disable BTM notifications.
+										PlistBuddy \
+											-c 'Add :Label string org.freegeek.Disable-BTM-Notifications' \
+											-c 'Add :ProgramArguments array' \
+											-c "Add :ProgramArguments: string '${this_user_apps_folder}/Free Geek Task Runner.app/Contents/Resources/Launch Free Geek Task Runner'" \
+											-c "Add :ProgramArguments: string bash" \
+											-c 'Add :AssociatedBundleIdentifiers string org.freegeek.Free-Geek-Task-Runner' \
+											-c 'Add :RunAtLoad bool true' \
+											-c 'Add :WatchPaths array' \
+											-c "Add :WatchPaths: string '${this_home_folder}/Library/Group Containers/group.com.apple.usernoted/Library/Preferences/group.com.apple.usernoted.plist'" \
+											-c 'Add :StandardOutPath string /dev/null' \
+											-c 'Add :StandardErrorPath string /dev/null' \
+											"${this_user_launch_agents_folder}/org.freegeek.Disable-BTM-Notifications.plist" &> /dev/null
+
+										disable_btm_notifications_code="
 PATH='/usr/bin:/bin:/usr/sbin:/sbin'
 
 TMPDIR=\"\$([[ -d \"\${TMPDIR}\" && -w \"\${TMPDIR}\" ]] && echo \"\${TMPDIR%/}/\" || echo '/private/tmp/')\" # Make sure TMPDIR is always set and that it always has a trailing slash for consistency regardless of the current environment.
@@ -1720,63 +1825,15 @@ done
 rm -f \"\${TMPDIR}fg-usernoted.plist\"
 "
 
-									plutil -insert 'ProgramArguments' -string "${disable_btm_notifications_code}" -append "${this_user_launch_agents_folder}/org.freegeek.Disable-BTM-Notifications.plist"
-									# Use "plutil" for script code that contains special xml/plist characters that need to be escaped.
-									# "PlistBuddy" would escape special xml/plist characters in values properly too, but because of how "PlistBuddy" values need to be specified inside of commands that
-									# are within a quoted string means that nested quotes in the values (which also exist) would need to be double escaped to not break the "PlistBuddy" commands themselves.
-									# That possible nested quoting issue doesn't exist with "plutil" because of how values are specified as their own separate argument rather than within commands like with "PlistBuddy".
+										plutil -insert 'ProgramArguments' -string "${disable_btm_notifications_code}" -append "${this_user_launch_agents_folder}/org.freegeek.Disable-BTM-Notifications.plist"
+										# Use "plutil" for script code that contains special xml/plist characters that need to be escaped.
+										# "PlistBuddy" would escape special xml/plist characters in values properly too, but because of how "PlistBuddy" values need to be specified inside of commands that
+										# are within a quoted string means that nested quotes in the values (which also exist) would need to be double escaped to not break the "PlistBuddy" commands themselves.
+										# That possible nested quoting issue doesn't exist with "plutil" because of how values are specified as their own separate argument rather than within commands like with "PlistBuddy".
+									fi
 								fi
 
 								chown -R "${this_uid}:20" "${this_user_launch_agents_folder}"
-
-
-								if (( DARWIN_MAJOR_VERSION >= 23 )) && [[ -d "${this_user_apps_folder}/Free Geek Task Runner.app" && -d '/private/var/db/ConfigurationProfiles/Settings' ]]; then
-									# macOS 14 Sonoma adds a full screen Remote Management enrollment prompt which is run by Setup Assistant,
-									# so whenever the files witin "/private/var/db/ConfigurationProfiles/Settings" are modified,
-									# check if Setup Assistant has been launched and quit it to close this prompt if it comes up.
-
-									write_to_log "Creating LaunchDaemon to Close Full Screen Remote Management Enrollment Prompt"
-
-									# NOTE: See comments in "SETUP FREE GEEK SETUP AUTO-LAUNCH" section above for information about "AssociatedBundleIdentifiers" to properly display in the Login Items section in macOS 13 Ventura, and using "LSRegisterURL" and "open" for the "Free Geek Task Runner" app name and icon properly show for the following LaunchAgent in the Login Items section.
-									osascript -l 'JavaScript' -e 'ObjC.import("LaunchServices"); run = argv => $.LSRegisterURL($.NSURL.fileURLWithPath(argv[0]), true)' -- "${this_user_apps_folder}/Free Geek Task Runner.app" &> /dev/null
-									launchctl asuser "${this_uid}" sudo -u "${this_username}" open -na "${this_user_apps_folder}/Free Geek Task Runner.app"
-
-									PlistBuddy \
-										-c 'Add :Label string org.freegeek.Close-Remote-Management-Enrollment-Prompt' \
-										-c 'Add :ProgramArguments array' \
-										-c "Add :ProgramArguments: string '${this_user_apps_folder}/Free Geek Task Runner.app/Contents/Resources/Launch Free Geek Task Runner'" \
-										-c "Add :ProgramArguments: string bash" \
-										-c 'Add :AssociatedBundleIdentifiers string org.freegeek.Free-Geek-Task-Runner' \
-										-c 'Add :RunAtLoad bool true' \
-										-c 'Add :WatchPaths array' \
-										-c "Add :WatchPaths: string '/private/var/db/ConfigurationProfiles/Settings/'" \
-										-c 'Add :StandardOutPath string /dev/null' \
-										-c 'Add :StandardErrorPath string /dev/null' \
-										'/Library/LaunchDaemons/org.freegeek.Close-Remote-Management-Enrollment-Prompt.plist' &> /dev/null
-
-									close_remote_management_enrollment_prompt_code="
-PATH='/usr/bin:/bin:/usr/sbin:/sbin'
-
-if [[ -f '/private/var/db/ConfigurationProfiles/Settings/.cloudConfigRecordFound' ]]; then
-	for (( quit_setup_assistant_attempt = 0; quit_setup_assistant_attempt < 30; quit_setup_assistant_attempt ++ )); do
-		sleep 1
-		if killall 'Setup Assistant' &> /dev/null; then
-			break
-		fi
-	done
-fi
-"
-
-									plutil -insert 'ProgramArguments' -string "${close_remote_management_enrollment_prompt_code}" -append '/Library/LaunchDaemons/org.freegeek.Close-Remote-Management-Enrollment-Prompt.plist'
-									# Use "plutil" for script code that contains special xml/plist characters that need to be escaped.
-									# "PlistBuddy" would escape special xml/plist characters in values properly too, but because of how "PlistBuddy" values need to be specified inside of commands that
-									# are within a quoted string means that nested quotes in the values (which also exist) would need to be double escaped to not break the "PlistBuddy" commands themselves.
-									# That possible nested quoting issue doesn't exist with "plutil" because of how values are specified as their own separate argument rather than within commands like with "PlistBuddy".
-
-									if [[ ! -f '/Library/LaunchDaemons/org.freegeek.fg-install-packages.plist' ]]; then # Do not need to load right away if started via LaunchDaemon since we will restart.
-										launchctl bootstrap system '/Library/LaunchDaemons/org.freegeek.Close-Remote-Management-Enrollment-Prompt.plist'
-									fi
-								fi
 
 
 								if [[ -f '/Users/Shared/.fgResetSnapshotCreated' && -d "${this_user_apps_folder}/Free Geek Snapshot Helper.app" ]]; then

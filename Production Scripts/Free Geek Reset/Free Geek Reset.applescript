@@ -16,7 +16,7 @@
 -- WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 --
 
--- Version: 2025.12.4-1
+-- Version: 2026.6.16-1
 
 -- Build Flag: LSUIElement
 -- Build Flag: CFBundleAlternateNames: ["FG Reset", "fgreset", "Reset"]
@@ -105,7 +105,7 @@ on error checkReadOnlyErrorMessage
 end try
 
 
-global adminUsername, adminPassword, lastDoShellScriptAsAdminAuthDate, hasT2chip, isAppleSilicon, isBigSurOrNewer, isVenturaOrNewer, isSonomaOrNewer -- Needs to be accessible in functions.
+global adminUsername, adminPassword, lastDoShellScriptAsAdminAuthDate, hasT2chip, isAppleSilicon, isBigSurOrNewer, isVenturaOrNewer, isSonomaOrNewer, buildInfoPath -- Needs to be accessible in functions.
 set lastDoShellScriptAsAdminAuthDate to 0
 
 set adminUsername to "fg-admin"
@@ -131,8 +131,11 @@ considering numeric strings
 	set isVenturaOrNewer to (systemVersion ≥ "13.0")
 	set isSonomaOrNewer to (systemVersion ≥ "14.0")
 	set isTahoeOrNewer to (systemVersion ≥ "16.0")
+	set isTahoeTwentySixDotFourOrNewer to (systemVersion ≥ "26.4")
+	set isGoldenGateOrNewer to (systemVersion ≥ "27.0")
 end considering
 
+set buildInfoPath to ((POSIX path of (path to shared documents folder)) & "Build Info/")
 
 if (((short user name of (system info)) is equal to demoUsername) and ((POSIX path of (path to me)) is equal to ("/Users/" & demoUsername & "/Applications/" & (name of me) & ".app/"))) then
 	set freeGeekUpdaterAppPath to ("/Users/" & demoUsername & "/Applications/Free Geek Updater.app")
@@ -145,37 +148,51 @@ if (((short user name of (system info)) is equal to demoUsername) and ((POSIX pa
 		end if
 	end try
 	
+	set justGrantedSetupUserTCC to false
 	try
-		set fgSetupName to "Free Geek Setup"
-		
-		((("/Users/" & demoUsername & "/Applications/" & fgSetupName & ".app") as POSIX file) as alias)
-		try
-			activate
-		end try
-		display alert "“" & fgSetupName & "” Hasn't Finished Running" message "Please wait for “" & fgSetupName & "” to finish and then try running “" & (name of me) & "” again." buttons {"Quit"} default button 1 as critical giving up after 15
-		try
-			-- For some reason, on Big Sur, apps are not opening unless we specify "-n" to "Open a new instance of the application(s) even if one is already running." All scripts have LSMultipleInstancesProhibited so this will not actually ever open a new instance.
-			do shell script "open -na " & (quoted form of ("/Users/" & demoUsername & "/Applications/" & fgSetupName & ".app"))
-		end try
-		quit
-		delay 10
+		(((buildInfoPath & ".fgSetupJustGrantedUserTCC") as POSIX file) as alias)
+		set justGrantedSetupUserTCC to true
 	end try
 	
+	set alreadyGrantedUserTCC to false
 	try
-		set cleanupAppName to "Cleanup After QA Complete"
-		
-		((("/Users/" & demoUsername & "/Applications/" & cleanupAppName & ".app") as POSIX file) as alias)
-		try
-			activate
-		end try
-		display alert "“" & cleanupAppName & "” Hasn't Been Run Yet" message "“" & cleanupAppName & "” must be run before this Mac can be reset." buttons {"Launch “" & cleanupAppName & "”"} default button 1 as critical giving up after 15
-		try
-			-- For some reason, on Big Sur, apps are not opening unless we specify "-n" to "Open a new instance of the application(s) even if one is already running." All scripts have LSMultipleInstancesProhibited so this will not actually ever open a new instance.
-			do shell script "open -na " & (quoted form of ("/Users/" & demoUsername & "/Applications/" & cleanupAppName & ".app"))
-		end try
-		quit
-		delay 10
+		(((buildInfoPath & ".fgResetGrantedUserTCC") as POSIX file) as alias)
+		set alreadyGrantedUserTCC to true
 	end try
+	
+	if ((not isGoldenGateOrNewer) or (not justGrantedSetupUserTCC) or alreadyGrantedUserTCC) then -- If is macOS 27 Golden Gate and justGrantedSetupUserTCC and NOT alreadyGrantedUserTCC, then DON'T QUIT because that means this launch is just to pre-grant permissions during Setup and then quit.
+		try
+			set fgSetupName to "Free Geek Setup"
+			
+			((("/Users/" & demoUsername & "/Applications/" & fgSetupName & ".app") as POSIX file) as alias)
+			try
+				activate
+			end try
+			display alert "“" & fgSetupName & "” Hasn't Finished Running" message "Please wait for “" & fgSetupName & "” to finish and then try running “" & (name of me) & "” again." buttons {"Quit"} default button 1 as critical giving up after 15
+			try
+				-- For some reason, on Big Sur, apps are not opening unless we specify "-n" to "Open a new instance of the application(s) even if one is already running." All scripts have LSMultipleInstancesProhibited so this will not actually ever open a new instance.
+				do shell script "open -na " & (quoted form of ("/Users/" & demoUsername & "/Applications/" & fgSetupName & ".app"))
+			end try
+			quit
+			delay 10
+		end try
+		
+		try
+			set cleanupAppName to "Cleanup After QA Complete"
+			
+			((("/Users/" & demoUsername & "/Applications/" & cleanupAppName & ".app") as POSIX file) as alias)
+			try
+				activate
+			end try
+			display alert "“" & cleanupAppName & "” Hasn't Been Run Yet" message "“" & cleanupAppName & "” must be run before this Mac can be reset." buttons {"Launch “" & cleanupAppName & "”"} default button 1 as critical giving up after 15
+			try
+				-- For some reason, on Big Sur, apps are not opening unless we specify "-n" to "Open a new instance of the application(s) even if one is already running." All scripts have LSMultipleInstancesProhibited so this will not actually ever open a new instance.
+				do shell script "open -na " & (quoted form of ("/Users/" & demoUsername & "/Applications/" & cleanupAppName & ".app"))
+			end try
+			quit
+			delay 10
+		end try
+	end if
 	
 	set designedForSnapshotReset to false
 	try
@@ -273,20 +290,81 @@ if (((short user name of (system info)) is equal to demoUsername) and ((POSIX pa
 		if (globalTCCallowedAppsAndServices does not contain (currentBundleIdentifier & "|kTCCServiceAccessibility")) then error ("“" & (name of me) & "” DOES NOT HAVE REQUIRED Accessibility Access")
 		if (globalTCCallowedAppsAndServices does not contain (currentBundleIdentifier & "|kTCCServiceSystemPolicyAllFiles")) then error ("“" & (name of me) & "” DOES NOT HAVE REQUIRED Full Disk Access") -- This should not be possible to hit since reading the global TCC.db would have errored if this app didn't have FDA, but check anyways.
 		
-		set userTCCdbPath to ((POSIX path of (path to library folder from user domain)) & "Application Support/com.apple.TCC/TCC.db")
-		set userTCCallowedAppsAndServices to (paragraphs of (do shell script ("sqlite3 " & (quoted form of userTCCdbPath) & " 'SELECT client,service,indirect_object_identifier FROM access WHERE (" & whereAllowedOrAuthValue & ")'"))) -- This SELECT command on the user TCC.db will error if "Free Geek Reset" doesn't have Full Disk Access (but that should never happen because we couldn't get this far without FDA).
-		
-		if (userTCCallowedAppsAndServices does not contain (currentBundleIdentifier & "|kTCCServiceAppleEvents|com.apple.systemevents")) then error ("“" & (name of me) & "” DOES NOT HAVE REQUIRED AppleEvents/Automation Access for “System Events”")
+		if (isGoldenGateOrNewer) then
+			-- On macOS 27 Golden Gate, the USER TCC.db file was moved into "/private/var/containers/Data/ProtectedSystem/[ARBITRARY UUID SPECIFIC TO CONTAINER PURPOSE USER BUT NOT USERS GUID]/Data/Library/Application Support/com.apple.TCC/TCC.db" and CANNOT be read or edited with ANY LEVEL OF ADMIN OR TCC PERMISSIONS in the booted OS.
+			-- https://developer.apple.com/documentation/macos-release-notes/macos-27-release-notes#TCC
+			-- So, instead of being able to auto-grant the required permissions for all apps with the Full Disk Access permissions from Free Geek Setup, each app must manually prompt for the technician to approve the required User TCC permissions before being allowing the app to run.
+			
+			set needsAutomationAccess to false
+			
+			try
+				tell application id "com.apple.systemevents" to every window -- To prompt for AppleEvents/Automation permission.
+			on error automationAccessErrorMessage number automationAccessErrorNumber
+				if ((automationAccessErrorNumber is equal to -1743) or (automationAccessErrorNumber is equal to -1712)) then
+					-- Error -1743 = Not authorized to send Apple events to app.
+					-- Error -1712 = AppleEvent timed out.
+					set needsAutomationAccess to true
+					set alreadyGrantedUserTCC to false
+				else
+					display alert ("Unexpected Error " & automationAccessErrorNumber) message automationAccessErrorMessage -- DEBUG
+				end if
+			end try
+			
+			if (needsAutomationAccess) then
+				try
+					do shell script ("tccutil reset AppleEvents " & currentBundleIdentifier) -- Clear AppleEvents (Automation) for this app to be able to just relaunch and prompt again. Resetting TCC for specific bundle IDs should work on Mojave and newer, but does not actually work on Mojave because of a bug (http://www.openradar.me/6813106), but since we don't install Mojave and this will only run on Catalina and newer (where it works) then it's ok.
+				end try
+				try
+					activate
+				end try
+				try
+					do shell script "afplay /System/Library/Sounds/Basso.aiff > /dev/null 2>&1 &"
+				end try
+				try
+					display alert "“" & (name of me) & "” must be allowed to control and perform actions in “System Events” to be able to function." message "You will be prompted for all required access again when you relaunch “" & (name of me) & "”." buttons {"Quit", "Relaunch “" & (name of me) & "” & Prompt Again"} cancel button 1 default button 2
+					try
+						do shell script "osascript -e 'delay 0.5' -e 'repeat while (application \"" & (POSIX path of (path to me)) & "\" is running)' -e 'delay 0.5' -e 'end repeat' -e 'do shell script \"open -na \\\"" & (POSIX path of (path to me)) & "\\\"\"' > /dev/null 2>&1 &"
+					end try
+				end try
+				quit
+				delay 10
+			else if (not alreadyGrantedUserTCC) then
+				try
+					do shell script "mkdir " & (quoted form of buildInfoPath)
+				end try
+				
+				try
+					doShellScriptAsAdmin("touch " & (quoted form of (buildInfoPath & ".fgResetGrantedUserTCC")))
+					set alreadyGrantedUserTCC to true
+				end try
+				
+				if (not justGrantedSetupUserTCC) then
+					-- Relaunch to be sure that it is launched with all the TCC permissions that we've just granted to it.
+					-- BUT, if justGrantedSetupUserTCC, then only quit because that means this launch was just to pre-grant permissions during Setup.
+					try
+						do shell script "osascript -e 'delay 0.5' -e 'repeat while (application \"" & (POSIX path of (path to me)) & "\" is running)' -e 'delay 0.5' -e 'end repeat' -e 'do shell script \"open -na \\\"" & (POSIX path of (path to me)) & "\\\"\"' > /dev/null 2>&1 &"
+					end try
+				end if
+				quit
+				delay 10
+			end if
+		else
+			set userTCCdbPath to ((POSIX path of (path to library folder from user domain)) & "Application Support/com.apple.TCC/TCC.db")
+			set userTCCallowedAppsAndServices to (paragraphs of (do shell script ("sqlite3 " & (quoted form of userTCCdbPath) & " 'SELECT client,service,indirect_object_identifier FROM access WHERE (" & whereAllowedOrAuthValue & ")'"))) -- This SELECT command on the user TCC.db will error if "Free Geek Reset" doesn't have Full Disk Access (but that should never happen because we couldn't get this far without FDA).
+			
+			if (userTCCallowedAppsAndServices does not contain (currentBundleIdentifier & "|kTCCServiceAppleEvents|com.apple.systemevents")) then error ("“" & (name of me) & "” DOES NOT HAVE REQUIRED AppleEvents/Automation Access for “System Events”")
+		end if
 	on error tccErrorMessage
 		if (tccErrorMessage starts with "Error: unable to open database") then set tccErrorMessage to ("“" & (name of me) & "” DOES NOT HAVE REQUIRED Full Disk Access (" & tccErrorMessage & ")")
 		
 		try
-			try
-				activate
-			end try
-			try
-				do shell script "afplay /System/Library/Sounds/Basso.aiff > /dev/null 2>&1 &"
-			end try
+			activate
+		end try
+		try
+			do shell script "afplay /System/Library/Sounds/Basso.aiff > /dev/null 2>&1 &"
+		end try
+		
+		try
 			display alert ("CRITICAL “" & (name of me) & "” TCC ERROR:
 
 " & tccErrorMessage) message "This should not have happened, please inform and deliver this Mac to Free Geek I.T. for further research if checking again does not work." buttons {"Shut Down", "Check Again"} cancel button 1 default button 2 as critical giving up after 10
@@ -299,6 +377,34 @@ if (((short user name of (system info)) is equal to demoUsername) and ((POSIX pa
 		quit
 		delay 10
 	end try
+	
+	if (isGoldenGateOrNewer and (not alreadyGrantedUserTCC)) then
+		try
+			do shell script ("tccutil reset AppleEvents " & currentBundleIdentifier) -- Clear AppleEvents (Automation) for this app to be able to just relaunch and prompt again. Resetting TCC for specific bundle IDs should work on Mojave and newer, but does not actually work on Mojave because of a bug (http://www.openradar.me/6813106), but since we don't install Mojave and this will only run on Catalina and newer (where it works) then it's ok.
+		end try
+		
+		try
+			activate
+		end try
+		try
+			do shell script "afplay /System/Library/Sounds/Basso.aiff > /dev/null 2>&1 &"
+		end try
+		
+		try
+			display alert ("CRITICAL “" & (name of me) & "” TCC ERROR:
+
+“" & (name of me) & "” must be allowed to control and perform actions in “System Events” to be able to function.") message "You will be prompted for all required access again when you relaunch “" & (name of me) & "”.
+
+This should not have happened, please inform and deliver this Mac to Free Geek I.T. for further research if prompting again does not work." buttons {"Shut Down", "Relaunch “" & (name of me) & "” & Prompt Again"} cancel button 1 default button 2 as critical giving up after 10
+			try
+				do shell script "osascript -e 'delay 0.5' -e 'repeat while (application \"" & (POSIX path of (path to me)) & "\" is running)' -e 'delay 0.5' -e 'end repeat' -e 'do shell script \"open -na \\\"" & (POSIX path of (path to me)) & "\\\"\"' > /dev/null 2>&1 &"
+			end try
+		on error
+			tell application id "com.apple.systemevents" to shut down with state saving preference
+		end try
+		quit
+		delay 10
+	end if
 	
 	set eraseAssistantAppPath to "/System/Library/CoreServices/Erase Assistant.app"
 	try
@@ -339,6 +445,7 @@ NOTE: You may need to select a language when rebooted into Recovery before Activ
 	set progress completed steps to 0
 	set progress description to "
 🚧	Preparing to Reset This Mac…"
+	set progress additional description to ""
 	
 	set progressWindowProgressBar to missing value
 	
@@ -482,8 +589,17 @@ ObjC.import(\"CoreServices\");
 		try
 			if (application eraseAssistantAppPath is running) then
 				tell application id "com.apple.systemevents" to tell (first application process whose bundle identifier is eraseAssistantAppID)
-					if (isVenturaOrNewer) then
-						if ((number of windows) is 1) and ((number of sheets of window 1) is 1) then
+					if (isGoldenGateOrNewer) then
+						if (((number of windows) is 1) and ((number of sheets of window 1) is 1) and ((number of buttons of group 1 of sheet 1 of window 1) is equal to 2) and ((number of text fields of group 1 of sheet 1 of window 1) is equal to 2)) then
+							set frontmost to true
+							set value of (text field 2 of group 1 of sheet 1 of window 1) to demoPassword
+							set frontmost to true
+							keystroke return
+							set didAttemptToAuthenticateEraseAssistant to true
+							exit repeat
+						end if
+					else if (isVenturaOrNewer) then
+						if (((number of windows) is 1) and ((number of sheets of window 1) is 1)) then
 							repeat with thisEraseAssistantButton in (buttons of sheet 1 of window 1)
 								if ((title of thisEraseAssistantButton) is equal to "Unlock") then
 									set value of (text field 2 of sheet 1 of window 1) to demoPassword
@@ -625,8 +741,6 @@ on errorAndQuit(errorMessage)
 end errorAndQuit
 
 on checkRemoteManagement()
-	set buildInfoPath to ((POSIX path of (path to shared documents folder)) & "Build Info/")
-	
 	try -- Don't check Remote Management if "TESTING" flag folder exists on desktop
 		((((POSIX path of (path to desktop folder from user domain)) & "TESTING") as POSIX file) as alias)
 	on error
@@ -703,7 +817,19 @@ to check for Remote Management (ADE/DEP/MDM)." with administrator privileges)
 					if (isSonomaOrNewer) then -- macOS 14 Sonoma adds a FULL SCREEN Remote Management Enrollment prompt which is run by Setup Assistant, so quit Setup Assistant to close this prompt if it comes up.
 						try
 							(("/private/var/db/ConfigurationProfiles/Settings/.cloudConfigRecordFound" as POSIX file) as alias) -- Only need to check if Setup Assistant launched if an enrollment record was found, which would creat this file.
-							do shell script "for (( quit_setup_assistant_attempt = 0; quit_setup_assistant_attempt < 10; quit_setup_assistant_attempt ++ )); do sleep 1; killall 'Setup Assistant' > /dev/null 2>&1 && break; done; exit 0" with administrator privileges
+							
+							try
+								do shell script "for quit_setup_assistant_attempt in $(seq 1 30); do sleep 1; killall 'Setup Assistant' > /dev/null 2>&1 && break; done > /dev/null 2>&1 &" with administrator privileges
+							end try
+							
+							if (isTahoeTwentySixDotFourOrNewer) then
+								-- Starting on macOS 26.4 Tahoe, when the Remote Management enrollment prompt is launched, macOS will also set the ByHost "com.apple.loginwindow" preference "MiniBuddyLaunch" to "true",
+								-- which would trigger user Setup Assistant to launch on the next boot. On Apple Silicon that seems to show Wi-Fi and Apple Intelligence user Setup Assistant panes, and on T2 Intel it shows the Accessibility pane (even when "~/.skipbuddy" was created).
+								-- So, always set the ByHost "com.apple.loginwindow" preference "MiniBuddyLaunch" back to "false" whenever the Remote Management enrollment prompt was launched.
+								try
+									do shell script "for disable_mini_buddy_launch_attempt in $(seq 1 30); do sleep 1; if [ \"$(defaults -currentHost read 'com.apple.loginwindow' 'MiniBuddyLaunch' 2> /dev/null)\" = '1' ]; then defaults -currentHost write 'com.apple.loginwindow' 'MiniBuddyLaunch' -bool false && break; fi; done > /dev/null 2>&1 &"
+								end try
+							end if
 						end try
 					end if
 					

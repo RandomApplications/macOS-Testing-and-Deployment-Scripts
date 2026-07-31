@@ -43,6 +43,7 @@ else
 
 	apple_db_device_product_types_and_folder_names='Mac Laptop:Macbook Pro
 Mac Laptop:Macbook Air
+Mac Laptop:Macbook Neo
 Mac Laptop:Macbook
 Mac Laptop:iBook
 Mac Laptop:PowerBook

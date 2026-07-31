@@ -16,7 +16,7 @@
 -- WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 --
 
--- Version: 2025.12.4-1
+-- Version: 2026.6.9-1
 
 -- Build Flag: LSUIElement
 -- Build Flag: IncludeSignedLauncher
@@ -117,12 +117,13 @@ if (((short user name of (system info)) is equal to demoUsername) and ((POSIX pa
 		if (tccErrorMessage starts with "Error: unable to open database") then set tccErrorMessage to ("“" & (name of me) & "” DOES NOT HAVE REQUIRED Full Disk Access (" & tccErrorMessage & ")")
 		
 		try
-			try
-				activate
-			end try
-			try
-				do shell script "afplay /System/Library/Sounds/Basso.aiff > /dev/null 2>&1 &"
-			end try
+			activate
+		end try
+		try
+			do shell script "afplay /System/Library/Sounds/Basso.aiff > /dev/null 2>&1 &"
+		end try
+		
+		try
 			display alert ("CRITICAL “" & (name of me) & "” TCC ERROR:
 
 " & tccErrorMessage) message "This should not have happened, please inform and deliver this Mac to Free Geek I.T. for further research if checking again does not work." buttons {"Shut Down", "Check Again"} cancel button 1 default button 2 as critical giving up after 10

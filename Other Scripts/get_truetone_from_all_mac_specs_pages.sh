@@ -30,7 +30,7 @@ all_mac_identification_pages+=( '108054' ) # iMac
 #all_mac_identification_pages+=( '102231' ) # Mac Studio
 #all_mac_identification_pages+=( '102887' ) # Mac Pro
 
-every_truetone_model=''
+every_truetone_model='Mac17,5+' # Manually include MacBook Neo model ID because as of 4/2/26 there is no identification page for this new model, only Docs and Specs pages: https://support.apple.com/docs/mac/301292 & https://support.apple.com/126322
 
 for this_mac_idenification_page in "${all_mac_identification_pages[@]}"; do
 	this_mac_idenification_page_source="$(curl -m 5 -sfL "https://support.apple.com/${this_mac_idenification_page}?nocache=$(date '+%s')")"
@@ -60,7 +60,7 @@ echo "\"${every_truetone_model//$'\n'/", "}\""
 
 echo ''
 
-# Example output from 10/27/25:
+# Example output from 04/02/26:
 
 # Supports True Tone
-# "Mac14,2", "Mac14,5", "Mac14,6", "Mac14,7", "Mac14,9", "Mac14,10", "Mac14,15", "Mac15,3", "Mac15,4", "Mac15,5", "Mac15,6", "Mac15,7", "Mac15,8", "Mac15,9", "Mac15,10", "Mac15,11", "Mac15,12", "Mac15,13", "Mac16,1", "Mac16,2", "Mac16,3", "Mac16,5", "Mac16,6", "Mac16,7", "Mac16,8", "Mac16,12", "Mac16,13", "Mac17,2", "MacBookAir8,2", "MacBookAir9,1", "MacBookAir10,1", "MacBookPro15,1", "MacBookPro15,2", "MacBookPro15,3", "MacBookPro15,4", "MacBookPro16,1", "MacBookPro16,2", "MacBookPro16,3", "MacBookPro16,4", "MacBookPro17,1", "MacBookPro18,1", "MacBookPro18,2", "MacBookPro18,3", "MacBookPro18,4", "iMac20,1", "iMac20,2", "iMac21,1", "iMac21,2"
+# "Mac14,2", "Mac14,5", "Mac14,6", "Mac14,7", "Mac14,9", "Mac14,10", "Mac14,15", "Mac15,3", "Mac15,4", "Mac15,5", "Mac15,6", "Mac15,7", "Mac15,8", "Mac15,9", "Mac15,10", "Mac15,11", "Mac15,12", "Mac15,13", "Mac16,1", "Mac16,2", "Mac16,3", "Mac16,5", "Mac16,6", "Mac16,7", "Mac16,8", "Mac16,12", "Mac16,13", "Mac17,2", "Mac17,3", "Mac17,4", "Mac17,5", "Mac17,6", "Mac17,7", "Mac17,8", "Mac17,9", "MacBookAir8,2", "MacBookAir9,1", "MacBookAir10,1", "MacBookPro15,1", "MacBookPro15,2", "MacBookPro15,3", "MacBookPro15,4", "MacBookPro16,1", "MacBookPro16,2", "MacBookPro16,3", "MacBookPro16,4", "MacBookPro17,1", "MacBookPro18,1", "MacBookPro18,2", "MacBookPro18,3", "MacBookPro18,4", "iMac20,1", "iMac20,2", "iMac21,1", "iMac21,2"

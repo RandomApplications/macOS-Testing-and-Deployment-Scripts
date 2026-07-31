@@ -34,6 +34,9 @@ every_specs_id_with_marketing_model_name_and_model_ids_from_identification_pages
 if [[ -f "${every_specs_id_with_marketing_model_name_and_model_ids_from_identification_pages_file_path}" ]]; then
 	>&2 echo "ALREADY CREATED FILE: ${every_specs_id_with_marketing_model_name_and_model_ids_from_identification_pages_file_path}"
 else
+	# Manually include MacBook Neo model ID because as of 4/2/26 there is no identification page for this new model, only Docs and Specs pages: https://support.apple.com/docs/mac/301292 & https://support.apple.com/126322
+	echo 'Mac Laptop;126322;MacBook Neo:MacBook Neo (13-inch, A18 Pro):Mac17,5:' | tee -a "${every_specs_id_with_marketing_model_name_and_model_ids_from_identification_pages_file_path}"
+
 	# All identification pages are listed on https://support.apple.com/102604 (as well as in the "Product or packaging" section of https://support.apple.com/102767 for Macs).
 	all_identification_pages_info='108052:Mac Laptop:MacBook Pro
 102869:Mac Laptop:MacBook Air
@@ -64,7 +67,11 @@ else
 			awk_model_name_scraping_code='
 /class="gb-header"/ {
 	gsub(/[<][^<>]*[>]/, "", $NF)
+	gsub("&nbsp;", " ", $NF)
+	gsub("'$'\xE2\x80\x91''", "-", $NF)
 	gsub(">", "", $NF)
+	gsub(/^ +/, "", $NF)
+	gsub(/ +$/, "", $NF)
 	print ""
 	print "Name: " $NF
 }
@@ -322,6 +329,7 @@ else
 			else
 				this_device_marketing_model_name="${this_device_docs_url_or_product_type_or_marketing_model_name:-UNKNOWN Marketing Model Name from Docs Page}"
 				this_device_marketing_model_name="${this_device_marketing_model_name//$'\xC2\xA0'/ }" # Replace any non-breaking spaces with regular spaces that exist in values from "https://support.apple.com/docs/watch/pl291" and others.
+				this_device_marketing_model_name="${this_device_marketing_model_name//$'\xE2\x80\x91'/-}" # Replace any non-breaking hyphens with regular hyphens that exist in page titles like "https://support.apple.com/en-us/docs/ipad/301036" and others.
 				this_device_marketing_model_name="${this_device_marketing_model_name//  / }" # Replace any double spaces with a single space that exist in some model names, such as "https://support.apple.com/docs/mac/119741" and others.
 				this_device_marketing_model_name="${this_device_marketing_model_name// ,/,}" # Replace any space+comma with a just comma that exist in some model names, such as "https://support.apple.com/en-us/docs/ipod/113636" and others.
 				this_device_marketing_model_name="${this_device_marketing_model_name% }" # Remove single trailing spaces that exist in values from "https://support.apple.com/docs/mac/503556" and others.
@@ -332,6 +340,7 @@ else
 				fi
 				this_marketing_model_name_from_docs_page="$(echo "${this_device_docs_page_source}" | xmllint --html --xpath 'normalize-space(//h1)' - 2> /dev/null)" # "normalize-space" will take care of any double spaces and leading/trailing spaces.
 				this_marketing_model_name_from_docs_page="${this_marketing_model_name_from_docs_page//$'\xC2\xA0'/ }" # Replace any non-breaking spaces with regular spaces that exist in values from "https://support.apple.com/docs/watch/pl291" and others.
+				this_marketing_model_name_from_docs_page="${this_marketing_model_name_from_docs_page//$'\xE2\x80\x91'/-}" # Replace any non-breaking hyphens with regular hyphens that exist in page titles like "https://support.apple.com/en-us/docs/ipad/301036" and others.
 				this_marketing_model_name_from_docs_page="${this_marketing_model_name_from_docs_page// ,/,}" # Replace any space+comma with a just comma that exist in some model names, such as "https://support.apple.com/en-us/docs/ipod/113636" and others.
 
 				if [[ "${this_device_marketing_model_name}" != "${this_marketing_model_name_from_docs_page}" ]]; then

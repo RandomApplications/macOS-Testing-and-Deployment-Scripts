@@ -173,6 +173,10 @@ iPad:iPad16,3:iPad Pro 11-inch (M4) Wi-Fi:A2836:
 iPad:iPad16,4:iPad Pro 11-inch (M4) Wi-Fi + Cellular:A2837:A3006:
 iPad:iPad16,5:iPad Pro 13-inch (M4) Wi-Fi:A2925:
 iPad:iPad16,6:iPad Pro 13-inch (M4) Wi-Fi + Cellular:A2926:A3007:
+iPad:iPad16,8:iPad Air 11-inch (M4) Wi-Fi:A3459:
+iPad:iPad16,9:iPad Air 11-inch (M4) Wi-Fi + Cellular:A3460:A3463:
+iPad:iPad16,10:iPad Air 13-inch (M4) Wi-Fi:A3461:
+iPad:iPad16,11:iPad Air 13-inch (M4) Wi-Fi + Cellular:A3462:A3464:
 iPad:iPad17,1:iPad Pro 11-inch Wi-Fi (M5):A3357:
 iPad:iPad17,2:iPad Pro 11-inch Wi-Fi + Cellular (M5):A3358:A3359:
 iPad:iPad17,3:iPad Pro 13-inch Wi-Fi (M5):A3360:
@@ -239,6 +243,7 @@ iPhone:iPhone18,1:iPhone 17 Pro:A3256:A3522:A3523:A3524:
 iPhone:iPhone18,2:iPhone 17 Pro Max:A3257:A3525:A3526:A3527:
 iPhone:iPhone18,3:iPhone 17:A3258:A3519:A3520:A3521:
 iPhone:iPhone18,4:iPhone Air:A3260:A3516:A3517:A3518:
+iPhone:iPhone18,5:iPhone 17e:A3575:A3634:A3635:
 iPod:iPod1,1:iPod touch (1st generation):A1213:
 iPod:iPod2,1:iPod touch (2nd generation):A1288:A1319:
 iPod:iPod3,1:iPod touch (3rd generation):A1318:
@@ -456,6 +461,13 @@ Mac Laptop:Mac16,8:MacBook Pro (14-inch, M4 Pro, Nov 2024):A3401:
 Mac Laptop:Mac16,12:MacBook Air (13-inch, M4, 2025):A3240:
 Mac Laptop:Mac16,13:MacBook Air (15-inch, M4, 2025):A3241:
 Mac Laptop:Mac17,2:MacBook Pro 14-inch (M5):A3434:
+Mac Laptop:Mac17,3:MacBook Air (13-inch, M5):A3449:
+Mac Laptop:Mac17,4:MacBook Air (15-inch, M5):A3448:
+Mac Laptop:Mac17,5:MacBook Neo:A3404:
+Mac Laptop:Mac17,6:MacBook Pro (16-inch, M5 Max):A3429:
+Mac Laptop:Mac17,7:MacBook Pro (14-inch, M5 Max):A3427:
+Mac Laptop:Mac17,8:MacBook Pro (16-inch, M5 Pro):A3428:
+Mac Laptop:Mac17,9:MacBook Pro (14-inch, M5 Pro):A3426:
 Mac Laptop:MacBook1,1:MacBook (13-inch, Mid 2006):A1181:
 Mac Laptop:MacBook2,1:MacBook (13-inch, Late 2006):A1181:
 Mac Laptop:MacBook2,1:MacBook (13-inch, Mid 2007):A1181:

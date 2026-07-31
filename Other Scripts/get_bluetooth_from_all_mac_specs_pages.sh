@@ -32,6 +32,7 @@ all_mac_identification_pages+=( '102887' ) # Mac Pro
 
 every_bluetooth_version=''
 
+every_bluetooth_6_model='Mac17,5+' # Manually include MacBook Neo model ID because as of 4/2/26 there is no identification page for this new model, only Docs and Specs pages: https://support.apple.com/docs/mac/301292 & https://support.apple.com/126322
 every_bluetooth_5dot3_model=''
 every_bluetooth_5_model=''
 every_bluetooth_4dot2_model=''
@@ -51,7 +52,7 @@ for this_mac_idenification_page in "${all_mac_identification_pages[@]}"; do
 			bluetooth_element_from_page="$(echo "${specs_page_source}" | xmllint --html --xpath '(//li[contains(text(),"Bluetooth") and contains(text(),".")]/text())[last()]' - 2> /dev/null)"
 
 			if [[ -z "${bluetooth_element_from_page}" ]]; then
-				bluetooth_element_from_page="$(echo "${specs_page_source}" | xmllint --html --xpath '(//p[contains(text(),"Bluetooth") and contains(text(),".")]/text())[last()]' - 2> /dev/null)"
+				bluetooth_element_from_page="$(echo "${specs_page_source}" | xmllint --html --xpath '(//p[contains(text(),"Bluetooth") and (contains(text(),".") or contains(text(),"6"))]/text())[last()]' - 2> /dev/null)"
 			fi
 
 			if [[ -z "${bluetooth_element_from_page}" ]]; then
@@ -69,6 +70,9 @@ for this_mac_idenification_page in "${all_mac_identification_pages[@]}"; do
 				fi
 
 				case "${bluetooth_version}" in
+					'6')
+						every_bluetooth_6_model+="${this_model_identifier}+"
+						;;
 					'5.3')
 						every_bluetooth_5dot3_model+="${this_model_identifier}+"
 						;;
@@ -104,7 +108,11 @@ done
 echo -e '\n\nEvery Bluetooth Verison'
 echo "${every_bluetooth_version}" | sort -urV
 
-echo 'Bluetooth 5.3'
+echo 'Bluetooth 6'
+every_bluetooth_6_model="$(echo "${every_bluetooth_6_model%+}" | tr '+' '\n' | sort -uV)"
+echo "\"${every_bluetooth_6_model//$'\n'/", "}\""
+
+echo -e '\nBluetooth 5.3'
 every_bluetooth_5dot3_model="$(echo "${every_bluetooth_5dot3_model%+}" | tr '+' '\n' | sort -uV)"
 echo "\"${every_bluetooth_5dot3_model//$'\n'/", "}\""
 
@@ -134,14 +142,18 @@ echo "\"${every_error_model//$'\n'/", "}\""
 
 echo ''
 
-# Example output from 10/27/25:
+# Example output from 04/02/26:
 
 # Every Bluetooth Verison
+# 6
 # 5.3
 # 5.0
 # 4.2
 # 4.0
 # 2.1 + EDR
+
+# Bluetooth 6
+# "Mac17,3", "Mac17,4", "Mac17,5", "Mac17,6", "Mac17,7", "Mac17,8", "Mac17,9"
 
 # Bluetooth 5.3
 # "Mac14,2", "Mac14,3", "Mac14,5", "Mac14,6", "Mac14,8", "Mac14,9", "Mac14,10", "Mac14,12", "Mac14,13", "Mac14,14", "Mac14,15", "Mac15,3", "Mac15,4", "Mac15,5", "Mac15,6", "Mac15,7", "Mac15,8", "Mac15,9", "Mac15,10", "Mac15,11", "Mac15,12", "Mac15,13", "Mac15,14", "Mac16,1", "Mac16,2", "Mac16,3", "Mac16,5", "Mac16,6", "Mac16,7", "Mac16,8", "Mac16,9", "Mac16,10", "Mac16,11", "Mac16,12", "Mac16,13", "Mac17,2"

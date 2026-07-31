@@ -45,16 +45,18 @@ every_67w_usbc_model=''
 every_61w_usbc_model=''
 every_30w_usbc_model=''
 every_29w_usbc_model=''
+every_20w_usbc_model='Mac17,5+' # Manually include MacBook Neo model ID because as of 4/2/26 there is no identification page for this new model, only Docs and Specs pages: https://support.apple.com/docs/mac/301292 & https://support.apple.com/126322
 
 # NOTE: The newer Apple Silicon Macs with MagSafe 3 tend to support multiple different wattages with and without fast
 # charge capabilities so their descriptions are not as clear and clean to analyze in code as the past power adapter types
 # since the MagSafe 3 capability is listed on a separate line as just the cable and not the power adapter itself.
 # So, instead of trying, just manually check the outputs and come up with more concise descriptions and pre-add them to their respective lists instead.
-every_140w_magsafe3_model='MacBookPro18,1+MacBookPro18,2+Mac14,6+Mac14,10+Mac15,7+Mac15,9+Mac15,11+Mac16,7+Mac16,5+'
+every_140w_magsafe3_model='MacBookPro18,1+MacBookPro18,2+Mac14,6+Mac14,10+Mac15,7+Mac15,9+Mac15,11+Mac16,7+Mac16,5+Mac17,6+Mac17,8+'
 every_67w_or_96w_magsafe3_model='MacBookPro18,3+MacBookPro18,4+Mac14,5+Mac14,9+'
-every_30w_or_35W_dp_or_70w_magsafe3_model='Mac14,2+Mac15,12+Mac16,12+'
-every_35W_dp_or_70w_magsafe3_model='Mac14,15+Mac15,13+Mac16,13+'
-every_70w_or_96w_magsafe3_model='Mac15,3+Mac15,6+Mac15,8+Mac15,10+Mac16,1+Mac16,6+Mac16,8+Mac17,2+'
+every_70w_or_96w_magsafe3_model='Mac15,3+Mac15,6+Mac15,8+Mac15,10+Mac16,1+Mac16,6+Mac16,8+Mac17,2+Mac17,7+Mac17,9+'
+every_30w_or_35w_dp_or_70w_magsafe3_model='Mac14,2+Mac15,12+Mac16,12+'
+every_35w_dp_or_70w_magsafe3_model='Mac14,15+Mac15,13+Mac16,13+'
+every_35w_dp_or_40w_with_60w_max_or_70w_model='Mac17,3+Mac17,4+'
 
 every_unknown_model=''
 
@@ -141,17 +143,22 @@ for this_mac_idenification_page in "${all_mac_identification_pages[@]}"; do
 				'29w usb-c power adapter')
 					every_29w_usbc_model+="${this_model_identifier}+"
 					;;
+				'20w usb-c power adapter')
+					every_20w_usbc_model+="${this_model_identifier}+"
+					;;
 				*)
 					if [[ "+${every_140w_magsafe3_model}" == *"+${this_model_identifier}+"* ]]; then
 						echo -e '\tMANUAL CONCISE DESCRIPTION: 140W USB-C/MagSafe 3'
 					elif [[ "+${every_67w_or_96w_magsafe3_model}" == *"+${this_model_identifier}+"* ]]; then
 						echo -e '\tMANUAL CONCISE DESCRIPTION: 67W or 96W USB-C/MagSafe 3'
-					elif [[ "+${every_30w_or_35W_dp_or_70w_magsafe3_model}" == *"+${this_model_identifier}+"* ]]; then
-						echo -e '\tMANUAL CONCISE DESCRIPTION: 30W or 35W Dual Port or 70W USB-C/MagSafe 3'
-					elif [[ "+${every_35W_dp_or_70w_magsafe3_model}" == *"+${this_model_identifier}+"* ]]; then
-						echo -e '\tMANUAL CONCISE DESCRIPTION: 35W Dual Port or 70W USB-C/MagSafe 3'
 					elif [[ "+${every_70w_or_96w_magsafe3_model}" == *"+${this_model_identifier}+"* ]]; then
 						echo -e '\tMANUAL CONCISE DESCRIPTION: 70W or 96W USB-C/MagSafe 3'
+					elif [[ "+${every_30w_or_35w_dp_or_70w_magsafe3_model}" == *"+${this_model_identifier}+"* ]]; then
+						echo -e '\tMANUAL CONCISE DESCRIPTION: 30W or 35W Dual Port or 70W USB-C/MagSafe 3'
+					elif [[ "+${every_35w_dp_or_70w_magsafe3_model}" == *"+${this_model_identifier}+"* ]]; then
+						echo -e '\tMANUAL CONCISE DESCRIPTION: 35W Dual Port or 70W USB-C/MagSafe 3'
+					elif [[ "+${every_35w_dp_or_40w_with_60w_max_or_70w_model}" == *"+${this_model_identifier}+"* ]]; then
+						echo -e '\tMANUAL CONCISE DESCRIPTION: 35W Dual Port or 40W (with 60W Max) or 70W USB-C/MagSafe 3'
 					else
 						echo -e '\tERROR: UNKNOWN Power Adater'
 						every_unknown_model+="${this_model_identifier}+"
@@ -214,6 +221,10 @@ echo -e '\n29W USB-C'
 every_29w_usbc_model="$(echo "${every_29w_usbc_model%+}" | tr '+' '\n' | sort -uV)"
 echo "\"${every_29w_usbc_model//$'\n'/", "}\""
 
+echo -e '\n20W USB-C'
+every_20w_usbc_model="$(echo "${every_20w_usbc_model%+}" | tr '+' '\n' | sort -uV)"
+echo "\"${every_20w_usbc_model//$'\n'/", "}\""
+
 echo -e '\n140W USB-C/MagSafe 3'
 every_140w_magsafe3_model="$(echo "${every_140w_magsafe3_model%+}" | tr '+' '\n' | sort -uV)"
 echo "\"${every_140w_magsafe3_model//$'\n'/", "}\""
@@ -222,17 +233,21 @@ echo -e '\n67W or 96W USB-C/MagSafe 3'
 every_67w_or_96w_magsafe3_model="$(echo "${every_67w_or_96w_magsafe3_model%+}" | tr '+' '\n' | sort -uV)"
 echo "\"${every_67w_or_96w_magsafe3_model//$'\n'/", "}\""
 
-echo -e '\n30W or 35W Dual Port or 70W USB-C/MagSafe 3'
-every_30w_or_35W_dp_or_70w_magsafe3_model="$(echo "${every_30w_or_35W_dp_or_70w_magsafe3_model%+}" | tr '+' '\n' | sort -uV)"
-echo "\"${every_30w_or_35W_dp_or_70w_magsafe3_model//$'\n'/", "}\""
-
-echo -e '\n35W Dual Port or 70W USB-C/MagSafe 3'
-every_35W_dp_or_70w_magsafe3_model="$(echo "${every_35W_dp_or_70w_magsafe3_model%+}" | tr '+' '\n' | sort -uV)"
-echo "\"${every_35W_dp_or_70w_magsafe3_model//$'\n'/", "}\""
-
 echo -e '\n70W or 96W USB-C/MagSafe 3'
 every_70w_or_96w_magsafe3_model="$(echo "${every_70w_or_96w_magsafe3_model%+}" | tr '+' '\n' | sort -uV)"
 echo "\"${every_70w_or_96w_magsafe3_model//$'\n'/", "}\""
+
+echo -e '\n30W or 35W Dual Port or 70W USB-C/MagSafe 3'
+every_30w_or_35w_dp_or_70w_magsafe3_model="$(echo "${every_30w_or_35w_dp_or_70w_magsafe3_model%+}" | tr '+' '\n' | sort -uV)"
+echo "\"${every_30w_or_35w_dp_or_70w_magsafe3_model//$'\n'/", "}\""
+
+echo -e '\n35W Dual Port or 70W USB-C/MagSafe 3'
+every_35w_dp_or_70w_magsafe3_model="$(echo "${every_35w_dp_or_70w_magsafe3_model%+}" | tr '+' '\n' | sort -uV)"
+echo "\"${every_35w_dp_or_70w_magsafe3_model//$'\n'/", "}\""
+
+echo -e '\n35W Dual Port or 40W (with 60W Max) or 70W USB-C/MagSafe 3'
+every_35w_dp_or_40w_with_60w_max_or_70w_model="$(echo "${every_35w_dp_or_40w_with_60w_max_or_70w_model%+}" | tr '+' '\n' | sort -uV)"
+echo "\"${every_35w_dp_or_40w_with_60w_max_or_70w_model//$'\n'/", "}\""
 
 echo -e '\nUNKNOWN Power Adapter (REQUIRES MANUAL EXAMINATION)'
 every_unknown_model="$(echo "${every_unknown_model%+}" | tr '+' '\n' | sort -uV)"
@@ -240,7 +255,7 @@ echo "\"${every_unknown_model//$'\n'/", "}\""
 
 echo ''
 
-# Example output from 10/27/25:
+# Example output from 04/02/26:
 
 # 85W MagSafe 1
 # "MacBookPro1,1", "MacBookPro1,2", "MacBookPro2,1", "MacBookPro2,2", "MacBookPro3,1", "MacBookPro4,1", "MacBookPro5,1", "MacBookPro5,2", "MacBookPro5,3", "MacBookPro6,1", "MacBookPro6,2", "MacBookPro8,2", "MacBookPro8,3", "MacBookPro9,1"
@@ -278,11 +293,17 @@ echo ''
 # 29W USB-C
 # "MacBook8,1", "MacBook9,1"
 
+# 20W USB-C
+# "Mac17,5"
+
 # 140W USB-C/MagSafe 3
-# "Mac14,6", "Mac14,10", "Mac15,7", "Mac15,9", "Mac15,11", "Mac16,5", "Mac16,7", "MacBookPro18,1", "MacBookPro18,2"
+# "Mac14,6", "Mac14,10", "Mac15,7", "Mac15,9", "Mac15,11", "Mac16,5", "Mac16,7", "Mac17,6", "Mac17,8", "MacBookPro18,1", "MacBookPro18,2"
 
 # 67W or 96W USB-C/MagSafe 3
 # "Mac14,5", "Mac14,9", "MacBookPro18,3", "MacBookPro18,4"
+
+# 70W or 96W USB-C/MagSafe 3
+# "Mac15,3", "Mac15,6", "Mac15,8", "Mac15,10", "Mac16,1", "Mac16,6", "Mac16,8", "Mac17,2", "Mac17,7", "Mac17,9"
 
 # 30W or 35W Dual Port or 70W USB-C/MagSafe 3
 # "Mac14,2", "Mac15,12", "Mac16,12"
@@ -290,8 +311,8 @@ echo ''
 # 35W Dual Port or 70W USB-C/MagSafe 3
 # "Mac14,15", "Mac15,13", "Mac16,13"
 
-# 70W or 96W USB-C/MagSafe 3
-# "Mac15,3", "Mac15,6", "Mac15,8", "Mac15,10", "Mac16,1", "Mac16,6", "Mac16,8", "Mac17,2"
+# 35W Dual Port or 40W (with 60W Max) or 70W USB-C/MagSafe 3
+# "Mac17,3", "Mac17,4"
 
 # UNKNOWN Power Adapter (REQUIRES MANUAL EXAMINATION)
 # ""

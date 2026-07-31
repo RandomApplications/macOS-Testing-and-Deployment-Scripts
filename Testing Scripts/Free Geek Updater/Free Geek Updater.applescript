@@ -16,7 +16,7 @@
 -- WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 --
 
--- Version: 2025.10.27-1
+-- Version: 2026.2.25-1
 
 -- App Icon is “Counterclockwise Arrows” from Twemoji (https://github.com/twitter/twemoji) by Twitter (https://twitter.com)
 -- Licensed under CC-BY 4.0 (https://creativecommons.org/licenses/by/4.0/)
@@ -129,7 +129,7 @@ set baseUpdatesURL to "https://apps.freegeek.org/macland/download/"
 try -- If "TESTING" flag folder exists on desktop, then use testing versions (from different URL)!
 	((((POSIX path of (path to desktop folder from user domain)) & "TESTING") as POSIX file) as alias)
 	set testingFlagExists to true
-	set baseUpdatesURL to "http://tools.freegeek.org/macland/download/"
+	set baseUpdatesURL to "https://apps-test.freegeek.org/macland/download/"
 end try
 
 set reinstallFlagExists to false

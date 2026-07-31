@@ -16,7 +16,7 @@
 -- WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 --
 
--- Version: 2025.10.17-1
+-- Version: 2026.6.16-1
 
 -- App Icon is “Green Apple” from Twemoji (https://github.com/twitter/twemoji) by Twitter (https://twitter.com)
 -- Licensed under CC-BY 4.0 (https://creativecommons.org/licenses/by/4.0/)
@@ -157,9 +157,13 @@ end considering
 if (isMojaveOrNewer) then
 	set needsAutomationAccess to false
 	try
-		tell application id "com.apple.systemevents" to every window -- To prompt for Automation access on Mojave
+		tell application id "com.apple.systemevents" to every window -- To prompt for AppleEvents/Automation permission.
 	on error automationAccessErrorMessage number automationAccessErrorNumber
-		if (automationAccessErrorNumber is equal to -1743) then set needsAutomationAccess to true
+		if ((automationAccessErrorNumber is equal to -1743) or (automationAccessErrorNumber is equal to -1712)) then
+			-- Error -1743 = Not authorized to send Apple events to app.
+			-- Error -1712 = AppleEvent timed out.
+			set needsAutomationAccess to true
+		end if
 	end try
 	
 	if (needsAutomationAccess) then
@@ -204,9 +208,11 @@ on error (assistiveAccessTestErrorMessage)
 	if ((offset of "not allowed assistive" in assistiveAccessTestErrorMessage) > 0) then
 		if (isMojaveOrNewer) then
 			try
-				tell application id "com.apple.systempreferences" to every window -- To prompt for Automation access on Mojave
+				tell application id "com.apple.systempreferences" to every window -- To prompt for AppleEvents/Automation permission.
 			on error automationAccessErrorMessage number automationAccessErrorNumber
-				if (automationAccessErrorNumber is equal to -1743) then
+				if ((automationAccessErrorNumber is equal to -1743) or (automationAccessErrorNumber is equal to -1712)) then
+					-- Error -1743 = Not authorized to send Apple events to app.
+					-- Error -1712 = AppleEvent timed out.
 					try
 						tell application id "com.apple.systempreferences" to activate
 					end try
@@ -302,6 +308,7 @@ set supportsVentura to false
 set supportsSonoma to false
 set supportsSequoia to false
 set supportsTahoe to false
+set supportsGoldenGate to false
 
 set modelInfoPath to tmpPath & "modelInfo.plist"
 try
@@ -330,6 +337,11 @@ try
 		if (((modelIdentifierName is equal to "iMac") and (modelIdentifierMajorNumber ≥ 19)) or ((modelIdentifierName is equal to "MacBookPro") and (modelIdentifierMajorNumber ≥ 15)) or ((modelIdentifierName is equal to "MacBookAir") and (modelIdentifierMajorNumber ≥ 9)) or ((modelIdentifierName is equal to "Macmini") and (modelIdentifierMajorNumber ≥ 8)) or ((modelIdentifierName is equal to "MacPro") and (modelIdentifierMajorNumber ≥ 7)) or (modelIdentifierName is equal to "iMacPro") or (modelIdentifierName is equal to "Mac")) then set supportsSequoia to true
 		
 		if (((modelIdentifierName is equal to "iMac") and (modelIdentifierMajorNumber ≥ 20)) or ((modelIdentifierName is equal to "MacBookPro") and ((modelIdentifierNumber is equal to "16,1") or (modelIdentifierNumber is equal to "16,2") or (modelIdentifierNumber is equal to "16,4") or (modelIdentifierMajorNumber ≥ 17))) or ((modelIdentifierName is equal to "MacBookAir") and (modelIdentifierMajorNumber ≥ 10)) or ((modelIdentifierName is equal to "Macmini") and (modelIdentifierMajorNumber ≥ 9)) or ((modelIdentifierName is equal to "MacPro") and (modelIdentifierMajorNumber ≥ 7)) or (modelIdentifierName is equal to "Mac")) then set supportsTahoe to true
+		
+		try
+			set chipType to ((value of property list item "chip_type" of hardwareItems) as text) -- This will only exist when running natively on Apple Silicon
+			if (chipType starts with "Apple ") then set supportsGoldenGate to true
+		end try
 	end tell
 on error (modelInfoErrorMessage)
 	log "Model Info Error: " & modelInfoErrorMessage
@@ -403,7 +415,9 @@ repeat
 			considering numeric strings
 				if (osVersion ≥ "10.12") then
 					set macOSname to "macOS"
-					if ((osVersion ≥ "16.0") and (not supportsTahoe)) then
+					if ((osVersion ≥ "27.0") and (not supportsGoldenGate)) then
+						set startupDiskIsCompatibleWithMac to false
+					else if ((osVersion ≥ "16.0") and (not supportsTahoe)) then
 						set startupDiskIsCompatibleWithMac to false
 					else if ((osVersion ≥ "15.0") and (not supportsSequoia)) then
 						set startupDiskIsCompatibleWithMac to false

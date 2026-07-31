@@ -467,7 +467,7 @@ while IFS='' read -rd '' this_app_path; do
 						;;
 				esac
 
-				latest_version="$(curl -m 5 -sfL "${mas_url}" | xmllint --html --xpath 'substring-after(//h4[starts-with(text(),"Version ")], " ")' - 2> /dev/null)"
+				latest_version="$(curl -m 5 -sfL "${mas_url}" | xmllint --html --xpath 'substring-after(//span[starts-with(text(),"Version ")], " ")' - 2> /dev/null)"
 
 				if [[ -n "${latest_version}" ]]; then
 					tracked_apps+=( "${this_app_name}" )
@@ -539,7 +539,7 @@ while IFS='' read -rd '' this_app_path; do
 						;;
 					'Geekbench 5')
 						app_verification_args=( 'notarized' 'SRW94G4YYQ' ) # Team ID of "Primate Labs Inc."
-						download_url="$(curl -m 5 -sfL 'https://www.geekbench.com/legacy/' | xmllint --html --xpath 'string(//a[contains(@href,"Geekbench-5") and contains(@href,"Mac.zip")]/@href)' - 2> /dev/null)"
+						download_url="$(curl -m 5 -sfL 'https://www.primatelabs.com/appcast/geekbench5.xml' | xmllint --xpath 'string(//enclosure/@url)' - 2> /dev/null)"
 						latest_version="$(echo "${download_url}" | cut -d '-' -f 2)"
 						;;
 					'GpuTest')
@@ -558,9 +558,8 @@ while IFS='' read -rd '' this_app_path; do
 						rm -rf "${mtb_source_path}/Users/Tester/Library/Containers/com.mactrackerapp.Mactracker" # Mactracker used be installed via MAS, but now installing the manual version. Make sure the old MAS Container is deleted to not confuse the preferences.
 
 						app_verification_args=( 'notarized' '63TP32R3AB' ) # Team ID of "Ian Page"
-						mactracker_appcast_xml="$(curl -m 5 -sfL 'https://update.mactracker.ca/appcast-b.xml')"
-						download_url="$(echo "${mactracker_appcast_xml}" | xmllint --xpath 'string(//enclosure/@url)' -)"
-						latest_version="$(echo "${mactracker_appcast_xml}" | xmllint --xpath 'string(//enclosure/@*[name()="sparkle:version"])' -)"
+						latest_version='8.0.1' # Mactracker 8.0.1 is the newest version that supports macOS 10.14 Mojave (https://mactracker.ca/releasenotes-mac.html).
+						download_url="https://mactracker.ca/downloads/Mactracker_${latest_version}.zip"
 						;;
 					'PiXel Check')
 						app_verification_args=( 'DO-NOT-VERIFY' )
@@ -776,7 +775,8 @@ if [[ -f "${volume_icon_path}" ]]; then
 fi
 
 echo -e "\n\nCreating MTB Disk Image (of Device ID ${mtb_source_device_id})..."
-date '+%Y%m%d' > "${mtb_source_path}/private/var/root/.mtbVersion"
+mtb_version="$(date '+%Y%m%d')"
+echo "${mtb_version}" > "${mtb_source_path}/private/var/root/.mtbVersion"
 diskutil unmountDisk "${mtb_source_device_id}" || diskutil unmountDisk force "${mtb_source_device_id}"
 
 mtb_dmg_path='/Users/Shared/Mac Deployment'
@@ -784,6 +784,6 @@ if [[ ! -d "${mtb_dmg_path}" ]]; then
 	mkdir -p "${mtb_dmg_path}"
 fi
 
-rm -rf "${mtb_dmg_path}/FreeGeek-MacTestBoot-Mojave-$(date +%Y%m%d).dmg"
-sudo hdiutil create "${mtb_dmg_path}/FreeGeek-MacTestBoot-Mojave-$(date +%Y%m%d).dmg" -srcdevice "${mtb_source_device_id}" || exit 1
-sudo asr imagescan --source "${mtb_dmg_path}/FreeGeek-MacTestBoot-Mojave-$(date +%Y%m%d).dmg" || exit 1
+rm -rf "${mtb_dmg_path}/FreeGeek-MacTestBoot-Mojave-${mtb_version}.dmg"
+sudo hdiutil create "${mtb_dmg_path}/FreeGeek-MacTestBoot-Mojave-${mtb_version}.dmg" -srcdevice "${mtb_source_device_id}" || exit 1
+sudo asr imagescan --source "${mtb_dmg_path}/FreeGeek-MacTestBoot-Mojave-${mtb_version}.dmg" || exit 1

@@ -16,7 +16,7 @@
 -- WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 --
 
--- Version: 2025.10.27-1
+-- Version: 2026.6.16-1
 
 -- Build Flag: LSUIElement
 -- Build Flag: IncludeSignedLauncher
@@ -129,7 +129,38 @@ if (((short user name of (system info)) is equal to demoUsername) and ((POSIX pa
 		set isSonomaOrNewer to (systemVersion ≥ "14.0")
 		set isSequoiaFifteenDotSixOrNewer to (systemVersion ≥ "15.6")
 		set isTahoeOrNewer to (systemVersion ≥ "16.0")
+		set isGoldenGateOrNewer to (systemVersion ≥ "27.0")
 	end considering
+	
+	set buildInfoPath to ((POSIX path of (path to shared documents folder)) & "Build Info/")
+	
+	set grantedSetupUserTCC to false
+	try
+		(((buildInfoPath & ".fgSetupGrantedUserTCC") as POSIX file) as alias)
+		set grantedSetupUserTCC to true
+	end try
+	
+	set justGrantedSetupUserTCC to false
+	try
+		(((buildInfoPath & ".fgSetupJustGrantedUserTCC") as POSIX file) as alias)
+		set justGrantedSetupUserTCC to true
+	end try
+	
+	set alreadyGrantedUserTCC to false
+	try
+		(((buildInfoPath & ".fgDemoHelperGrantedUserTCC") as POSIX file) as alias)
+		set alreadyGrantedUserTCC to true
+	end try
+	
+	if (isGoldenGateOrNewer and ((not grantedSetupUserTCC) or (justGrantedSetupUserTCC and alreadyGrantedUserTCC))) then -- If is macOS 27 Golden Gate and NOT grantedSetupUserTCC or justGrantedSetupUserTCC and somehow alreadyGrantedUserTCC, then QUIT because that means TCC permissions were already granted we're still in the pre-grant permissions loop during Setup and Demo Helper should not have been re-launched yet and we won't want it to start doing anything yet.
+		try
+			-- For some reason, on Big Sur, apps are not opening unless we specify "-n" to "Open a new instance of the application(s) even if one is already running." All scripts have LSMultipleInstancesProhibited so this will not actually ever open a new instance.
+			do shell script "open -na " & (quoted form of ("/Users/" & demoUsername & "/Applications/Free Geek Setup.app"))
+		end try
+		
+		quit
+		delay 10
+	end if
 	
 	try
 		set globalTCCdbPath to "/Library/Application Support/com.apple.TCC/TCC.db" -- For more info about the TCC.db structure, see "fg-install-os" script and https://www.rainforestqa.com/blog/macos-tcc-db-deep-dive
@@ -143,22 +174,98 @@ if (((short user name of (system info)) is equal to demoUsername) and ((POSIX pa
 			-- Full Disk Access was introduced in macOS 10.14 Mojave.
 			if (globalTCCallowedAppsAndServices does not contain (currentBundleIdentifier & "|kTCCServiceSystemPolicyAllFiles")) then error ("“" & (name of me) & "” DOES NOT HAVE REQUIRED Full Disk Access") -- This should not be possible to hit since reading the global TCC.db would have errored if this app didn't have FDA, but check anyways.
 			
-			set userTCCdbPath to ((POSIX path of (path to library folder from user domain)) & "Application Support/com.apple.TCC/TCC.db")
-			set userTCCallowedAppsAndServices to (paragraphs of (do shell script ("sqlite3 " & (quoted form of userTCCdbPath) & " 'SELECT client,service,indirect_object_identifier FROM access WHERE (" & whereAllowedOrAuthValue & ")'"))) -- This SELECT command on the user TCC.db will error if "Free Geek Demo Helper" doesn't have Full Disk Access (but that should never happen because we couldn't get this far without FDA).
-			
-			if (userTCCallowedAppsAndServices does not contain (currentBundleIdentifier & "|kTCCServiceAppleEvents|com.apple.systemevents")) then error ("“" & (name of me) & "” DOES NOT HAVE REQUIRED AppleEvents/Automation Access for “System Events”")
-			if (userTCCallowedAppsAndServices does not contain (currentBundleIdentifier & "|kTCCServiceAppleEvents|com.apple.finder")) then error ("“" & (name of me) & "” DOES NOT HAVE REQUIRED AppleEvents/Automation Access for “Finder”")
+			if (isGoldenGateOrNewer) then
+				-- On macOS 27 Golden Gate, the USER TCC.db file was moved into "/private/var/containers/Data/ProtectedSystem/[ARBITRARY UUID SPECIFIC TO CONTAINER PURPOSE USER BUT NOT USERS GUID]/Data/Library/Application Support/com.apple.TCC/TCC.db" and CANNOT be read or edited with ANY LEVEL OF ADMIN OR TCC PERMISSIONS in the booted OS.
+				-- https://developer.apple.com/documentation/macos-release-notes/macos-27-release-notes#TCC
+				-- So, instead of being able to auto-grant the required permissions for all apps with the Full Disk Access permissions from Free Geek Setup, each app must manually prompt for the technician to approve the required User TCC permissions before being allowing the app to run.
+				
+				set needsAutomationAccess to false
+				
+				try
+					tell application id "com.apple.finder" to every window -- To prompt for AppleEvents/Automation permission.
+				on error automationAccessErrorMessage number automationAccessErrorNumber
+					if ((automationAccessErrorNumber is equal to -1743) or (automationAccessErrorNumber is equal to -1712)) then
+						-- Error -1743 = Not authorized to send Apple events to app.
+						-- Error -1712 = AppleEvent timed out.
+						set needsAutomationAccess to true
+						set alreadyGrantedUserTCC to false
+					else
+						display alert ("Unexpected Error " & automationAccessErrorNumber) message automationAccessErrorMessage -- DEBUG
+					end if
+				end try
+				
+				if (not needsAutomationAccess) then
+					try
+						tell application id "com.apple.systemevents" to every window -- To prompt for AppleEvents/Automation permission.
+					on error automationAccessErrorMessage number automationAccessErrorNumber
+						if ((automationAccessErrorNumber is equal to -1743) or (automationAccessErrorNumber is equal to -1712)) then
+							-- Error -1743 = Not authorized to send Apple events to app.
+							-- Error -1712 = AppleEvent timed out.
+							set needsAutomationAccess to true
+							set alreadyGrantedUserTCC to false
+						else
+							display alert ("Unexpected Error " & automationAccessErrorNumber) message automationAccessErrorMessage -- DEBUG
+						end if
+					end try
+				end if
+				
+				if (needsAutomationAccess) then
+					try
+						do shell script ("tccutil reset AppleEvents " & currentBundleIdentifier) -- Clear AppleEvents (Automation) for this app to be able to just relaunch and prompt again. Resetting TCC for specific bundle IDs should work on Mojave and newer, but does not actually work on Mojave because of a bug (http://www.openradar.me/6813106), but since we don't install Mojave and this will only run on Catalina and newer (where it works) then it's ok.
+					end try
+					try
+						activate
+					end try
+					try
+						do shell script "afplay /System/Library/Sounds/Basso.aiff > /dev/null 2>&1 &"
+					end try
+					try
+						display alert "“" & (name of me) & "” must be allowed to control and perform actions in “Finder” and “System Events” to be able to function." message "You will be prompted for all required access again when you relaunch “" & (name of me) & "”." buttons {"Quit", "Relaunch “" & (name of me) & "” & Prompt Again"} cancel button 1 default button 2
+						try
+							do shell script "osascript -e 'delay 0.5' -e 'repeat while (application \"" & (POSIX path of (path to me)) & "\" is running)' -e 'delay 0.5' -e 'end repeat' -e 'do shell script \"open -na \\\"" & (POSIX path of (path to me)) & "\\\"\"' > /dev/null 2>&1 &"
+						end try
+					end try
+					quit
+					delay 10
+				else if (not alreadyGrantedUserTCC) then
+					try
+						do shell script "mkdir " & (quoted form of buildInfoPath)
+					end try
+					
+					try
+						doShellScriptAsAdmin("touch " & (quoted form of (buildInfoPath & ".fgDemoHelperGrantedUserTCC")))
+						set alreadyGrantedUserTCC to true
+					end try
+					
+					if (not justGrantedSetupUserTCC) then
+						-- Relaunch to be sure that it is launched with all the TCC permissions that we've just granted to it.
+						-- BUT, if justGrantedSetupUserTCC, then only quit because that means this launch was just to pre-grant permissions during Setup.
+						try
+							do shell script "osascript -e 'delay 0.5' -e 'repeat while (application \"" & (POSIX path of (path to me)) & "\" is running)' -e 'delay 0.5' -e 'end repeat' -e 'do shell script \"open -na \\\"" & (POSIX path of (path to me)) & "\\\"\"' > /dev/null 2>&1 &"
+						end try
+					end if
+					quit
+					delay 10
+				end if
+			else
+				set userTCCdbPath to ((POSIX path of (path to library folder from user domain)) & "Application Support/com.apple.TCC/TCC.db")
+				set userTCCallowedAppsAndServices to (paragraphs of (do shell script ("sqlite3 " & (quoted form of userTCCdbPath) & " 'SELECT client,service,indirect_object_identifier FROM access WHERE (" & whereAllowedOrAuthValue & ")'"))) -- This SELECT command on the user TCC.db will error if "Free Geek Demo Helper" doesn't have Full Disk Access (but that should never happen because we couldn't get this far without FDA).
+				
+				if (userTCCallowedAppsAndServices does not contain (currentBundleIdentifier & "|kTCCServiceAppleEvents|com.apple.systemevents")) then error ("“" & (name of me) & "” DOES NOT HAVE REQUIRED AppleEvents/Automation Access for “System Events”")
+				if (userTCCallowedAppsAndServices does not contain (currentBundleIdentifier & "|kTCCServiceAppleEvents|com.apple.finder")) then error ("“" & (name of me) & "” DOES NOT HAVE REQUIRED AppleEvents/Automation Access for “Finder”")
+			end if
 		end if
 	on error tccErrorMessage
 		if (tccErrorMessage starts with "Error: unable to open database") then set tccErrorMessage to ("“" & (name of me) & "” DOES NOT HAVE REQUIRED Full Disk Access (" & tccErrorMessage & ")")
 		
 		try
-			try
-				activate
-			end try
-			try
-				do shell script "afplay /System/Library/Sounds/Basso.aiff > /dev/null 2>&1 &"
-			end try
+			activate
+		end try
+		try
+			do shell script "afplay /System/Library/Sounds/Basso.aiff > /dev/null 2>&1 &"
+		end try
+		
+		try
 			display alert ("CRITICAL “" & (name of me) & "” TCC ERROR:
 
 " & tccErrorMessage) message "This should not have happened, please inform and deliver this Mac to Free Geek I.T. for further research if checking again does not work." buttons {"Shut Down", "Check Again"} cancel button 1 default button 2 as critical giving up after 10
@@ -171,6 +278,34 @@ if (((short user name of (system info)) is equal to demoUsername) and ((POSIX pa
 		quit
 		delay 10
 	end try
+	
+	if (isGoldenGateOrNewer and (not alreadyGrantedUserTCC)) then
+		try
+			do shell script ("tccutil reset AppleEvents " & currentBundleIdentifier) -- Clear AppleEvents (Automation) for this app to be able to just relaunch and prompt again. Resetting TCC for specific bundle IDs should work on Mojave and newer, but does not actually work on Mojave because of a bug (http://www.openradar.me/6813106), but since we don't install Mojave and this will only run on Catalina and newer (where it works) then it's ok.
+		end try
+		
+		try
+			activate
+		end try
+		try
+			do shell script "afplay /System/Library/Sounds/Basso.aiff > /dev/null 2>&1 &"
+		end try
+		
+		try
+			display alert ("CRITICAL “" & (name of me) & "” TCC ERROR:
+
+“" & (name of me) & "” must be allowed to control and perform actions in “Finder” and “System Events” to be able to function.") message "You will be prompted for all required access again when you relaunch “" & (name of me) & "”.
+
+This should not have happened, please inform and deliver this Mac to Free Geek I.T. for further research if prompting again does not work." buttons {"Shut Down", "Relaunch “" & (name of me) & "” & Prompt Again"} cancel button 1 default button 2 as critical giving up after 10
+			try
+				do shell script "osascript -e 'delay 0.5' -e 'repeat while (application \"" & (POSIX path of (path to me)) & "\" is running)' -e 'delay 0.5' -e 'end repeat' -e 'do shell script \"open -na \\\"" & (POSIX path of (path to me)) & "\\\"\"' > /dev/null 2>&1 &"
+			end try
+		on error
+			tell application id "com.apple.systemevents" to shut down with state saving preference
+		end try
+		quit
+		delay 10
+	end if
 	
 	set qaCompleteHasRun to true
 	try
@@ -226,7 +361,6 @@ if (((short user name of (system info)) is equal to demoUsername) and ((POSIX pa
 	else
 		set forceRunEvenIfNotJustBootedOrIdle to false
 		try
-			set buildInfoPath to ((POSIX path of (path to shared documents folder)) & "Build Info/")
 			(((buildInfoPath & ".fgSetupLaunchedDemoHelper") as POSIX file) as alias)
 			
 			try
@@ -294,10 +428,11 @@ if (((short user name of (system info)) is equal to demoUsername) and ((POSIX pa
 							set hardwareItems to (first property list item of property list item "_items" of first property list item)
 							set modelID to ((value of property list item "machine_model" of hardwareItems) as text)
 							set serialNumber to ((value of property list item "serial_number" of hardwareItems) as text)
-							if (serialNumber is equal to "Not Available") then
+							if (serialNumber ends with "vailable") then -- In "system_profiler", Macs without a serial number will show as "Unavailable" on macOS 11 Big Sur and newer and as "Not Available" on macOS 10.15 Catalina and older.
 								try
 									set serialNumber to ((value of property list item "riser_serial_number" of hardwareItems) as text)
 									set serialNumber to (do shell script "echo '" & serialNumber & "' | tr -d '[:space:]'")
+									if (serialNumber ends with "vailable") then error "UNKNOWN SERIAL NUMBER"
 								on error
 									set serialNumber to "UNKNOWNSERIAL-" & (random number from 100 to 999)
 								end try

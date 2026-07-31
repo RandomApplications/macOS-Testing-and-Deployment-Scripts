@@ -16,7 +16,7 @@
 -- WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 --
 
--- Version: 2025.10.13-1
+-- Version: 2026.6.16-1
 
 -- App Icon is “Victory Hand” from Twemoji (https://github.com/twitter/twemoji) by Twitter (https://twitter.com)
 -- Licensed under CC-BY 4.0 (https://creativecommons.org/licenses/by/4.0/)
@@ -161,9 +161,11 @@ end considering
 
 if (isMojaveOrNewer) then
 	try
-		tell application id "com.apple.systemevents" to every window -- To prompt for Automation access on Mojave
+		tell application id "com.apple.systemevents" to every window -- To prompt for AppleEvents/Automation permission.
 	on error automationAccessErrorMessage number automationAccessErrorNumber
-		if (automationAccessErrorNumber is equal to -1743) then
+		if ((automationAccessErrorNumber is equal to -1743) or (automationAccessErrorNumber is equal to -1712)) then
+			-- Error -1743 = Not authorized to send Apple events to app.
+			-- Error -1712 = AppleEvent timed out.
 			try
 				tell application id "com.apple.systempreferences" to activate
 			end try
@@ -206,9 +208,11 @@ on error (assistiveAccessTestErrorMessage)
 	if ((offset of "not allowed assistive" in assistiveAccessTestErrorMessage) > 0) then
 		if (isMojaveOrNewer) then
 			try
-				tell application id ("com.yellowagents." & "FingerMgmt") to every window -- To prompt for Automation access on Mojave (Break up App ID or else build will fail if not found during compilation when app is not installed.)
+				tell application id ("com.yellowagents." & "FingerMgmt") to every window -- To prompt for AppleEvents/Automation permission. (Break up App ID or else build will fail if not found during compilation when app is not installed.)
 			on error automationAccessErrorMessage number automationAccessErrorNumber
-				if (automationAccessErrorNumber is equal to -1743) then
+				if ((automationAccessErrorNumber is equal to -1743) or (automationAccessErrorNumber is equal to -1712)) then
+					-- Error -1743 = Not authorized to send Apple events to app.
+					-- Error -1712 = AppleEvent timed out.
 					try
 						tell application id "com.apple.systempreferences" to activate
 					end try

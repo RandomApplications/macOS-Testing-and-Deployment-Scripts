@@ -36,7 +36,7 @@ external_disk_list="$(diskutil list external physical)"
 external_disk_count="$(echo "${external_disk_list}" | grep -c '^/dev/disk')"
 
 if [[ -z "${external_disk_count}" || "${external_disk_count}" == '0' ]]; then
-	>&2 echo 'ERROR: No Mac drives detected.'
+	>&2 echo -e '\nERROR: No Mac drives detected.'
 	afplay /System/Library/Sounds/Basso.aiff
 	exit 1
 fi
@@ -79,11 +79,11 @@ if [[ "${confirm_format_drives}" =~ ^[Yy] ]]; then
 		else
 			echo -e "\nFormatting \"${this_disk_id}\"..."
 
-			# NOTE: For some reason (at least as of macOS 26.0.1 Tahoe) each desired size need 0.13 GB added to it to result in the correct desired size.
+			# NOTE: For some reason (at least as of macOS 26.4 Tahoe and older) each desired size need 0.13 GB added to it to result in the correct desired size.
 			# The sizes (plus 0.13 GB) being used for each installer are specified in the "Create macOS USB Installer Commands.txt" file based on testing to find the minimum required size for each macOS version installer.
 
 			diskutil_partition_disk_array=(
-				JHFS+ 'fgMIB'						1.33G		# 1.2 GB
+				JHFS+ 'fgMIB'						1.63G		# 1.5 GB
 				# JHFS+ 'Install macOS High Sierra'	5.435G		# 5.305 GB
 				# JHFS+ 'Install macOS Mojave'		6.245G		# 6.115 GB
 				JHFS+ 'Install macOS Catalina'		8.46G		# 8.33 GB
@@ -91,8 +91,8 @@ if [[ "${confirm_format_drives}" =~ ^[Yy] ]]; then
 				JHFS+ 'Install macOS Monterey'		14.735G		# 14.605 GB
 				JHFS+ 'Install macOS Ventura'		14.53G		# 14.4 GB
 				JHFS+ 'Install macOS Sonoma'		15.985G		# 15.855 GB
-				JHFS+ 'Install macOS Sequoia'		17.995G		# 17.865 GB
-				JHFS+ 'Install macOS Tahoe'			19.72G		# 19.59 GB
+				JHFS+ 'Install macOS Sequoia'		18G			# 17.87 GB
+				JHFS+ 'Install macOS Tahoe'			20.71G		# 20.58 GB
 				JHFS+ 'Mac Test Boot'				0B			# All Remaining Space
 			)
 
@@ -150,6 +150,30 @@ human_readable_duration_from_seconds() { # Based On: https://stackoverflow.com/a
 	echo "${duration_output}"
 }
 
+get_macos_version_from_installer_app() {
+	local installer_app_macos_version=''
+
+	if [[ "$1" == *'/Install macOS '*'.app' ]]; then
+		if [[ -f "$1/Contents/SharedSupport/InstallInfo.plist" ]]; then
+			# For macOS 10.15 Catalina and older installer apps, the actual macOS version can be retrieved from the following "InstallInfo.plist" file.
+
+			installer_app_macos_version="$(PlistBuddy -c 'Print :"Payload Image Info":version' "$1/Contents/SharedSupport/InstallInfo.plist")"
+		elif [[ -f "$1/Contents/SharedSupport/SharedSupport.dmg" ]]; then
+			# For macOS 11 Big Sur and newer installers apps, the actual macOS version is only available by mounting the following "SharedSupport.dmg" file
+			# and reading the following "com_apple_MobileAsset_MacSoftwareUpdate.xml" file (which is actually a PLIST) from within that volume.
+
+			# >&2 echo "Temporarily Mounting \"$1/Contents/SharedSupport/SharedSupport.dmg\" to Get macOS Version..."
+			local installer_source_shared_support_volume
+			installer_source_shared_support_volume="$(hdiutil attach "$1/Contents/SharedSupport/SharedSupport.dmg" -nobrowse -readonly -noverify -plist 2> /dev/null | xmllint --xpath 'string(//string[starts-with(text(), "/Volumes/")])' - 2> /dev/null)"
+			installer_app_macos_version="$(PlistBuddy -c 'Print :Assets:0:OSVersion' "${installer_source_shared_support_volume}/com_apple_MobileAsset_MacSoftwareUpdate/com_apple_MobileAsset_MacSoftwareUpdate.xml")"
+			# >&2 echo "Unmounting \"$1/Contents/SharedSupport/SharedSupport.dmg\" from \"${installer_source_shared_support_volume}\"..."
+			hdiutil detach "${installer_source_shared_support_volume}" &> /dev/null || hdiutil detach "${installer_source_shared_support_volume}" -force &> /dev/null || >&2 echo "ERROR: Failed to unmount \"$1/Contents/SharedSupport/SharedSupport.dmg\" from \"${installer_source_shared_support_volume}\"."
+		fi
+	fi
+
+	echo "${installer_app_macos_version:-N/A}"
+}
+
 
 overall_start_timestamp="$(date '+%s')"
 
@@ -168,9 +192,17 @@ for this_installer_name_to_update in "${installer_names_to_update[@]}"; do
 	echo -e "\nMounting Installer DMG \"${installer_dmg_path##*/}\"..."
 	installer_source_volume="$(hdiutil attach "${installer_dmg_path}" -nobrowse -readonly -plist 2> /dev/null | xmllint --xpath 'string(//string[starts-with(text(), "/Volumes/")])' - 2> /dev/null)"
 	if [[ -d "${installer_source_volume}" ]]; then
-		installer_source_version="$(PlistBuddy -c 'Print :CFBundleVersion' "${installer_source_volume}/Install macOS ${this_installer_name_to_update}.app/Contents/version.plist")"
+		installer_source_version='ERROR'
+		if [[ -f "${installer_source_volume}/Install macOS ${this_installer_name_to_update}.app/Contents/Info.plist" ]]; then
+			installer_source_version="$(PlistBuddy -c 'Print :CFBundleShortVersionString' "${installer_source_volume}/Install macOS ${this_installer_name_to_update}.app/Contents/Info.plist")" # This installer app version is not always updated between minor macOS updates (such as between 26.4 and 26.4.1).
+		fi
 
-		echo "Mounted Installer DMG at \"${installer_source_volume}\" & Updating Connected Installers..."
+		installer_source_macos_version="$(get_macos_version_from_installer_app "${installer_source_volume}/Install macOS ${this_installer_name_to_update}.app")"
+
+		echo "Source Installer App Version: ${installer_source_version:-ERROR}"
+		echo "Source Installer macOS Version: ${installer_source_macos_version}"
+
+		echo "Mounted Installer DMG \"${installer_source_volume}\" & Updating Connected Installers..."
 		if [[ "$(sysctl -in hw.optional.arm64)" == '1' && -e "${TMPDIR}/Install macOS ${this_installer_name_to_update}.app" ]]; then
 			rm -rf "${TMPDIR}/Install macOS ${this_installer_name_to_update}.app"
 		fi
@@ -181,9 +213,18 @@ for this_installer_name_to_update in "${installer_names_to_update[@]}"; do
 		for this_os_installer_volume in "/Volumes/Install macOS ${this_installer_name_to_update}"*; do
 			if [[ -d "${this_os_installer_volume}" && "${this_os_installer_volume}" != "${installer_source_volume}" ]]; then
 				(( this_connected_installer_volume_count ++ ))
-				this_os_installer_version="$(PlistBuddy -c 'Print :CFBundleVersion' "${this_os_installer_volume}/Install macOS ${this_installer_name_to_update}.app/Contents/version.plist")"
-				if [[ "${this_os_installer_version}" != "${installer_source_version}" ]]; then
-					echo "Updating Connected Installer at \"${this_os_installer_volume}\"..."
+				this_os_installer_version='N/A'
+				if [[ -f "${this_os_installer_volume}/Install macOS ${this_installer_name_to_update}.app/Contents/Info.plist" ]]; then
+					this_os_installer_version="$(PlistBuddy -c 'Print :CFBundleShortVersionString' "${this_os_installer_volume}/Install macOS ${this_installer_name_to_update}.app/Contents/Info.plist")"
+				fi
+
+				this_os_installer_macos_version="$(get_macos_version_from_installer_app "${this_os_installer_volume}/Install macOS ${this_installer_name_to_update}.app")"
+
+				echo "Connected Installer \"${this_os_installer_volume}\" App Version: ${this_os_installer_version:-N/A}"
+				echo "Connected Installer \"${this_os_installer_volume}\" macOS Version: ${this_os_installer_macos_version}"
+
+				if [[ "${this_os_installer_version}" != "${installer_source_version}" || "${this_os_installer_macos_version}" != "${installer_source_macos_version}" ]]; then
+					echo "Updating Connected Installer \"${this_os_installer_volume}\"..."
 
 					createinstallmedia_path="${installer_source_volume}/Install macOS ${this_installer_name_to_update}.app/Contents/Resources/createinstallmedia"
 
@@ -272,7 +313,7 @@ for this_installer_name_to_update in "${installer_names_to_update[@]}"; do
 						sleep 10 # Sleep a bit before starting the next "createinstallmedia" process since I've seen them fail consistently with "Couldn't find InstallInfo.plist" and "The bless of the installer disk failed." when two Montery "createinstallmedia" processes were started at the same time.
 					fi
 				else
-					echo "Connected Installer at \"${this_os_installer_volume}\" Already Up-to-Date"
+					echo "Connected Installer \"${this_os_installer_volume}\" Already Up-to-Date"
 				fi
 			fi
 		done
@@ -300,20 +341,29 @@ for this_installer_name_to_update in "${installer_names_to_update[@]}"; do
 
 			for this_os_installer_volume in "/Volumes/Install macOS ${this_installer_name_to_update}"*; do
 				if [[ -d "${this_os_installer_volume}" && "${this_os_installer_volume}" != "${installer_source_volume}" ]]; then
-					this_os_installer_version="$(PlistBuddy -c 'Print :CFBundleVersion' "${this_os_installer_volume}/Install macOS ${this_installer_name_to_update}.app/Contents/version.plist")"
-					if [[ "${this_os_installer_version}" != "${installer_source_version}" ]]; then
-						>&2 echo "ERROR: Failed to update connected installer at \"${this_os_installer_volume}\"."
+					this_os_installer_version='N/A'
+					if [[ -f "${this_os_installer_volume}/Install macOS ${this_installer_name_to_update}.app/Contents/Info.plist" ]]; then
+						this_os_installer_version="$(PlistBuddy -c 'Print :CFBundleShortVersionString' "${this_os_installer_volume}/Install macOS ${this_installer_name_to_update}.app/Contents/Info.plist")"
+					fi
+
+					this_os_installer_macos_version="$(get_macos_version_from_installer_app "${this_os_installer_volume}/Install macOS ${this_installer_name_to_update}.app")"
+
+					echo "Connected Installer \"${this_os_installer_volume}\" App Version: ${this_os_installer_version:-N/A}"
+					echo "Connected Installer \"${this_os_installer_volume}\" macOS Version: ${this_os_installer_macos_version}"
+
+					if [[ "${this_os_installer_version}" != "${installer_source_version}" || "${this_os_installer_macos_version}" != "${installer_source_macos_version}" ]]; then
+						>&2 echo "ERROR: Failed to update connected installer \"${this_os_installer_volume}\"."
 						some_update_failed=true
 					elif ! $some_update_failed; then
-						echo "Unmounting Connected Installer at \"${this_os_installer_volume}\"..."
-						diskutil unmount "${this_os_installer_volume}" &> /dev/null || diskutil unmount force "${this_os_installer_volume}" &> /dev/null || >&2 echo "ERROR: Failed to unmount connected installer at \"${this_os_installer_volume}\"."
+						echo "Unmounting Connected Installer \"${this_os_installer_volume}\"..."
+						diskutil unmount "${this_os_installer_volume}" &> /dev/null || diskutil unmount force "${this_os_installer_volume}" &> /dev/null || >&2 echo "ERROR: Failed to unmount connected installer \"${this_os_installer_volume}\"."
 					fi
 				fi
 			done
 		fi
 
-		echo "Unmounting Installer DMG at \"${installer_source_volume}\"..."
-		hdiutil detach "${installer_source_volume}" &> /dev/null || hdiutil detach "${installer_source_volume}" -force &> /dev/null || >&2 echo "ERROR: Failed to unmount DMG at \"${installer_source_volume}\"."
+		echo "Unmounting Installer DMG \"${installer_source_volume}\"..."
+		hdiutil detach "${installer_source_volume}" &> /dev/null || hdiutil detach "${installer_source_volume}" -force &> /dev/null || >&2 echo "ERROR: Failed to unmount DMG \"${installer_source_volume}\"."
 
 		if $some_update_failed; then
 			afplay /System/Library/Sounds/Basso.aiff
@@ -336,10 +386,14 @@ mtb_source_volume="$(hdiutil attach "${mtb_dmg_path}" -nobrowse -readonly -plist
 if [[ -d "${mtb_source_volume}" ]]; then
 	all_mtb_start_timestamp="$(date '+%s')"
 
-	mtb_source_version="$(< "${mtb_source_volume}/private/var/root/.mtbVersion")"
-	echo "MTB Source Version: ${mtb_source_version}"
-	echo "Unmounting MTB Source DMG at \"${mtb_source_volume}\"..."
-	hdiutil detach "${mtb_source_volume}" &> /dev/null || hdiutil detach "${mtb_source_volume}" -force &> /dev/null || >&2 echo "ERROR: Failed to unmount DMG at \"${mtb_source_volume}\"."
+	mtb_source_version='ERROR'
+	if [[ -f "${mtb_source_volume}/private/var/root/.mtbVersion" ]]; then
+		mtb_source_version="$(< "${mtb_source_volume}/private/var/root/.mtbVersion")"
+	fi
+
+	echo "MTB Source Version: ${mtb_source_version:-ERROR}"
+	echo "Unmounting MTB Source DMG \"${mtb_source_volume}\"..."
+	hdiutil detach "${mtb_source_volume}" &> /dev/null || hdiutil detach "${mtb_source_volume}" -force &> /dev/null || >&2 echo "ERROR: Failed to unmount DMG \"${mtb_source_volume}\"."
 
 	echo -e '\nUpdating Connected MTBs...'
 	background_pids=()
@@ -350,9 +404,13 @@ if [[ -d "${mtb_source_volume}" ]]; then
 				this_mtb_parent_disk_size="$(diskutil info -plist "$(echo "${this_mtb_volume_info_plist}" | plutil -extract 'ParentWholeDisk' raw - 2> /dev/null)" 2> /dev/null | plutil -extract 'TotalSize' raw - 2> /dev/null)"
 				if (( this_mtb_parent_disk_size > 33000000000 )); then # The MTB source drive is 32 GB but all production drives are 120+ GB.
 					(( connected_mtb_count ++ ))
-					this_connected_mtb_version="$(< "${this_mtb_volume}/private/var/root/.mtbVersion")"
+					this_connected_mtb_version='N/A'
+					if [[ -f "${this_mtb_volume}/private/var/root/.mtbVersion" ]]; then
+						this_connected_mtb_version="$(< "${this_mtb_volume}/private/var/root/.mtbVersion")"
+					fi
+
 					if [[ "${this_connected_mtb_version}" != "${mtb_source_version}" ]]; then
-						echo "Updating Connected MTB at \"${this_mtb_volume}\"..."
+						echo "Updating Connected MTB \"${this_mtb_volume}\" (Version ${this_connected_mtb_version:-N/A})..."
 						
 						{
 							this_mtb_start_timestamp="$(date '+%s')"
@@ -370,15 +428,15 @@ if [[ -d "${mtb_source_volume}" ]]; then
 						} &
 						background_pids+=( "$!" )
 					else
-						echo "Connected MTB at \"${this_mtb_volume}\" Already Up-to-Date"
+						echo "Connected MTB \"${this_mtb_volume}\" Already Up-to-Date"
 					fi
 				else
-					echo "Ignoring & Unmounting SOURCE MTB at \"${this_mtb_volume}\"..."
-					diskutil unmount "${this_mtb_volume}" &> /dev/null || diskutil unmount force "${this_mtb_volume}" &> /dev/null || >&2 echo "ERROR: Failed to unmount SOURCE MTB at \"${this_mtb_volume}\"."
+					echo "Ignoring & Unmounting SOURCE MTB \"${this_mtb_volume}\"..."
+					diskutil unmount "${this_mtb_volume}" &> /dev/null || diskutil unmount force "${this_mtb_volume}" &> /dev/null || >&2 echo "ERROR: Failed to unmount SOURCE MTB \"${this_mtb_volume}\"."
 				fi
 			else
-				echo "Ignoring & Unmounting UNWRITABLE MTB at \"${this_mtb_volume}\""
-				diskutil unmount "${this_mtb_volume}" &> /dev/null || diskutil unmount force "${this_mtb_volume}" &> /dev/null || >&2 echo "ERROR: Failed to unmount UNWRITABLE MTB at \"${this_mtb_volume}\"."
+				echo "Ignoring & Unmounting UNWRITABLE MTB \"${this_mtb_volume}\""
+				diskutil unmount "${this_mtb_volume}" &> /dev/null || diskutil unmount force "${this_mtb_volume}" &> /dev/null || >&2 echo "ERROR: Failed to unmount UNWRITABLE MTB \"${this_mtb_volume}\"."
 			fi
 		fi
 	done
@@ -405,11 +463,11 @@ if [[ -d "${mtb_source_volume}" ]]; then
 			if [[ -d "${this_mtb_volume}" ]]; then
 				this_connected_mtb_version="$(< "${this_mtb_volume}/private/var/root/.mtbVersion")"
 				if [[ "${this_connected_mtb_version}" != "${mtb_source_version}" ]]; then
-					>&2 echo "ERROR: Failed to update connected MTB at \"${this_mtb_volume}\"."
+					>&2 echo "ERROR: Failed to update connected MTB \"${this_mtb_volume}\"."
 					some_mtb_failed=true
 				elif ! $some_mtb_failed; then
-					echo "Unmounting Connected MTB at \"${this_mtb_volume}\"..."
-					diskutil unmount "${this_mtb_volume}" &> /dev/null || diskutil unmount force "${this_mtb_volume}" &> /dev/null || >&2 echo "ERROR: Failed to unmount connected MTB at \"${this_mtb_volume}\"."
+					echo "Unmounting Connected MTB \"${this_mtb_volume}\"..."
+					diskutil unmount "${this_mtb_volume}" &> /dev/null || diskutil unmount force "${this_mtb_volume}" &> /dev/null || >&2 echo "ERROR: Failed to unmount connected MTB \"${this_mtb_volume}\"."
 				fi
 			fi
 		done

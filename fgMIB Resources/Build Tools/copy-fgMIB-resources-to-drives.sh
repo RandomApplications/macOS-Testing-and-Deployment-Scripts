@@ -203,7 +203,7 @@ if [[ -f "${PROJECT_DIR}/fg-install-os.sh" && -f "${PROJECT_DIR}/reset-remote-ma
 		fi
 	done
 else
-	echo -e "ERROR - CRITICAL FILES NOT FOUND IN PROJECT_DIR:\n${PROJECT_DIR}"
+	echo -e "ERROR - CRITICAL FILES NOT FOUND IN \"/Users/Shared/Mac Deployment\" OR \"${PROJECT_DIR}\""
 fi
 
 echo -e "\nFinished Updating fgMIB on ${connected_fgMIB_count} Mac Drives in $(human_readable_duration_from_seconds "$(( $(date '+%s') - overall_start_timestamp ))")"
